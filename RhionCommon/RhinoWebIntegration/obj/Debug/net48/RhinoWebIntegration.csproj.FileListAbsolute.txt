@@ -1,0 +1,5 @@
+D:\workspace2\rhino-web\RhionCommon\RhinoWebIntegration\obj\Debug\net48\RhinoWebIntegration.csproj.AssemblyReference.cache
+D:\workspace2\rhino-web\RhionCommon\RhinoWebIntegration\obj\Debug\net48\RhinoWebIntegration.GeneratedMSBuildEditorConfig.editorconfig
+D:\workspace2\rhino-web\RhionCommon\RhinoWebIntegration\obj\Debug\net48\RhinoWebIntegration.AssemblyInfoInputs.cache
+D:\workspace2\rhino-web\RhionCommon\RhinoWebIntegration\obj\Debug\net48\RhinoWebIntegration.AssemblyInfo.cs
+D:\workspace2\rhino-web\RhionCommon\RhinoWebIntegration\obj\Debug\net48\RhinoWebIntegration.csproj.CoreCompileInputs.cache

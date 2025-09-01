@@ -1,0 +1,8 @@
+is_global = true
+build_property.RootNamespace = RhinoWebIntegration
+build_property.ProjectDir = D:\workspace2\rhino-web\RhionCommon\RhinoWebIntegration\
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 
+build_property.CsWinRTUseWindowsUIXamlProjections = false
+build_property.EffectiveAnalysisLevelStyle = 
+build_property.EnableCodeStyleSeverity = 
