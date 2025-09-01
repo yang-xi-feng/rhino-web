@@ -1,97 +1,60 @@
 <template>
   <div class="rhino-viewport-container">
-    <h2>Rhino 视口截图</h2>
+    <h2>上传图片</h2>
     
-    <div class="screenshot-controls">
-      <button @click="captureViewport" class="capture-btn">获取视口截图</button>
-      <div class="loading-indicator" v-if="isLoading">获取中...</div>
-    </div>
-    
-    <div class="screenshot-display" v-if="viewportScreenshot">
-      <h3>当前视口截图：</h3>
-      <img :src="viewportScreenshot" alt="Rhino视口截图" class="screenshot-image" />
-    </div>
-    
-    <div v-else class="no-screenshot">
-      <p>尚未获取视口截图，请点击上方按钮</p>
-      <p class="note">注意：在实际集成中，此功能需要通过Rhino插件实现与Rhino软件的通信</p>
+    <div class="upload-controls">
+      <div class="upload-area" @click="triggerFileInput">
+        <span class="upload-icon">📁</span>
+        <p class="upload-text">点击上传图片</p>
+        <p class="upload-hint">支持JPG、PNG等格式</p>
+        <input 
+          ref="fileInput" 
+          type="file" 
+          accept="image/*" 
+          class="file-input"
+          @change="handleFileUpload"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 
-const viewportScreenshot = ref('');
-const isLoading = ref(false);
+// 定义emit事件，用于向父组件传递图片信息
+const emit = defineEmits(['imageUploaded']);
 
-// 实际集成时，调用Rhino插件提供的API获取视口截图
-const captureViewport = async () => {
-  isLoading.value = true;
-  
-  try {
-    // 检查Rhino插件是否已加载
-    console.log('检查Rhino API状态:', {
-      hasWindow: !!window.rhino,
-      hasFunction: window.rhino && typeof window.rhino.CaptureCurrentViewport === 'function',
-      rhinoKeys: window.rhino ? Object.getOwnPropertyNames(window.rhino) : 'undefined'
-    });
+const fileInput = ref(null);
+const previewImage = ref('');
+
+// 触发文件选择
+const triggerFileInput = () => {
+  fileInput.value?.click();
+};
+
+// 处理文件上传
+const handleFileUpload = (event) => {
+  const file = event.target.files[0];
+  if (file) {
+    // 读取文件并生成预览
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      previewImage.value = e.target.result;
+      // 向父组件发送图片信息
+      emit('imageUploaded', {
+        src: e.target.result,
+        name: file.name,
+        size: file.size,
+        type: file.type
+      });
+    };
+    reader.readAsDataURL(file);
     
-    if (!window.rhino || typeof window.rhino.CaptureCurrentViewport !== 'function') {
-      // 如果不在Rhino环境中运行，则使用模拟数据
-      console.log('未检测到Rhino插件，使用模拟数据');
-      
-      // 模拟网络请求延迟
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // 使用示例图片作为模拟数据
-      const mockScreenshot = 'https://picsum.photos/800/600?random=' + Math.random();
-      viewportScreenshot.value = mockScreenshot;
-    } else {
-      // 在Rhino环境中运行，调用实际的Rhino API
-      console.log('调用Rhino API获取视口截图');
-      
-      try {
-        const screenshotData = await window.rhino.CaptureCurrentViewport();
-        console.log('Rhino API返回数据类型:', typeof screenshotData, '长度:', screenshotData?.length);
-        
-        if (screenshotData && screenshotData.length > 0) {
-          // 确保返回的是正确的Base64格式
-          const imageData = screenshotData.startsWith('data:image/') ? screenshotData : `data:image/png;base64,${screenshotData}`;
-          viewportScreenshot.value = imageData;
-          console.log('Rhino视口截图已获取，数据长度:', screenshotData.length);
-        } else {
-          throw new Error('未能获取Rhino视口截图 - 返回数据为空');
-        }
-      } catch (rhinoError) {
-        console.error('调用Rhino API时出错:', rhinoError);
-        throw new Error(`Rhino API调用失败: ${rhinoError.message}`);
-      }
-    }
-  } catch (error) {
-    console.error('获取Rhino视口截图失败:', error);
-    // 在出错时也显示模拟数据，避免完全失败
-    const fallbackScreenshot = 'https://picsum.photos/800/600?random=' + Math.random();
-    viewportScreenshot.value = fallbackScreenshot;
-    console.log('使用备用模拟数据');
-  } finally {
-    isLoading.value = false;
+    // 清空input值，允许重复上传同一文件
+    event.target.value = '';
   }
 };
-
-// 检查当前是否在Rhino环境中运行
-const isRunningInRhino = () => {
-  return !!window.rhino && typeof window.rhino.CaptureCurrentViewport === 'function';
-};
-
-// 组件挂载时检查Rhino环境
-onMounted(() => {
-  if (isRunningInRhino()) {
-    console.log('Rhino Web Integration已连接');
-  } else {
-    console.log('在开发环境中运行，使用模拟数据');
-  }
-});
 </script>
 
 <style scoped>
@@ -110,64 +73,68 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-.screenshot-controls {
+.upload-controls {
   display: flex;
   justify-content: center;
-  align-items: center;
-  gap: 15px;
   margin-bottom: 20px;
 }
 
-.capture-btn {
-  padding: 10px 20px;
-  background-color: #42b883;
-  color: white;
-  border: none;
-  border-radius: 4px;
+.upload-area {
+  width: 300px;
+  height: 200px;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  transition: all 0.3s ease;
+  background-color: white;
+}
+
+.upload-area:hover {
+  border-color: #42b883;
+  background-color: #f5fdf9;
+}
+
+.upload-icon {
+  font-size: 48px;
+  margin-bottom: 10px;
+  color: #999;
+}
+
+.upload-text {
   font-size: 16px;
-  transition: background-color 0.3s;
+  color: #333;
+  margin: 0 0 5px 0;
+  font-weight: 500;
 }
 
-.capture-btn:hover {
-  background-color: #35495e;
+.upload-hint {
+  font-size: 12px;
+  color: #666;
+  margin: 0;
 }
 
-.capture-btn:active {
-  transform: scale(0.98);
+.file-input {
+  display: none;
 }
 
-.loading-indicator {
-  color: #42b883;
-  font-size: 14px;
-}
-
-.screenshot-display {
+.upload-preview {
   text-align: center;
 }
 
-.screenshot-display h3 {
+.upload-preview h3 {
   color: #333;
   margin-bottom: 15px;
 }
 
-.screenshot-image {
+.preview-image {
   max-width: 100%;
-  height: auto;
+  max-height: 400px;
   border-radius: 4px;
   border: 1px solid #ddd;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.no-screenshot {
-  text-align: center;
-  color: #666;
-}
-
-.note {
-  font-style: italic;
-  font-size: 14px;
-  margin-top: 10px;
-  color: #888;
 }
 </style>

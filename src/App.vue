@@ -1,6 +1,7 @@
 <script setup>
 import RhinoViewport from './components/RhinoViewport.vue'
 import { ref, onMounted, onUnmounted } from 'vue'
+import { queue, ws } from './api'
 
 // 项目数据
 const projects = ref([
@@ -51,6 +52,30 @@ const creativeDescriptions = ref({
   }
 })
 
+// 上传的图片信息
+const uploadedImage = ref(null)
+
+// 处理图片上传事件
+const handleImageUpload = (imageInfo) => {
+  uploadedImage.value = imageInfo
+  console.log('收到上传的图片信息:', imageInfo)
+  
+  // 将上传的图片设置到模型原图区域并显示
+  viewportScreenshot.value = imageInfo.src
+  showScreenshot.value = true
+}
+
+// 格式化文件大小
+const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 Bytes'
+  
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
 // 设计类别相关数据
 const showDesignCategories = ref(false) // 默认隐藏，点击室内设计时才显示下拉菜单
 const designCategories = ref([
@@ -75,6 +100,15 @@ const designCategories = ref([
   { id: 15, name: '', image: 'https://picsum.photos/120/80?random=115' },
   { id: 16, name: '', image: 'https://picsum.photos/120/80?random=116' }
 ])
+
+// 任务相关状态
+const isTaskRunning = ref(false)
+const isCancelingTask = ref(false)
+const taskProgress = ref(0)
+const taskMessages = ref([])
+const currentTaskId = ref('')
+const currentClientId = ref('')
+const taskCancelMessage = ref('')
 
 const selectProject = (project) => {
   selectedProject.value = project
@@ -190,6 +224,127 @@ const handleClickOutside = (event) => {
   }
 }
 
+// 处理任务进度更新
+const handleTaskProgress = (progress) => {
+  taskProgress.value = progress
+  taskMessages.value.push(`任务进度: ${progress}%`)
+  
+  // 任务完成时的处理
+  if (progress >= 100) {
+    setTimeout(() => {
+      isTaskRunning.value = false
+      taskMessages.value.push('任务已完成！')
+    }, 1000)
+  }
+}
+
+// 开始任务进度监听
+const startTaskProgressMonitoring = (clientId) => {
+  try {
+    currentClientId.value = clientId
+    ws.connectWithTaskId(clientId)
+    ws.onTaskProgress((progress) => {
+      handleTaskProgress(progress)
+    })
+    taskMessages.value.push('开始监听任务进度...')
+  } catch (error) {
+    console.error('启动任务进度监听失败:', error)
+    taskMessages.value.push(`进度监听失败: ${error.message}`)
+  }
+}
+
+// 停止任务进度监听
+const stopTaskProgressMonitoring = () => {
+  try {
+    ws.offTaskProgress()
+    ws.close()
+    currentClientId.value = ''
+    taskMessages.value.push('已停止任务进度监听')
+  } catch (error) {
+    console.error('停止任务进度监听失败:', error)
+  }
+}
+
+// 提交渲染任务
+const submitRenderTask = async () => {
+  if (!viewportScreenshot.value) {
+    alert('请先获取模型原图')
+    return
+  }
+  
+  isTaskRunning.value = true
+  isCancelingTask.value = false
+  taskProgress.value = 0
+  taskMessages.value = []
+  
+  try {
+    // 准备任务参数
+    const categoryData = creativeDescriptions.value[selectedCategoryName.value]
+    const taskParams = {
+      modelOriginalUrl: viewportScreenshot.value,
+      positiveDescription: categoryData.positiveDescription,
+      negativeDescription: categoryData.negativeDescription,
+      designStyle: categoryData.designStyle,
+      aspectRatio: categoryData.aspectRatio,
+      atmosphere: categoryData.atmosphere,
+      environment: categoryData.environment,
+      quality: renderSettings.value.quality,
+      lighting: renderSettings.value.lighting,
+      resolution: renderSettings.value.resolution
+    }
+    
+    // 调用任务下发API
+    taskMessages.value.push('正在提交渲染任务...')
+    const result = await queue.sendTaskToComfyuiQueue(taskParams)
+    
+    if (result && result.client_id) {
+      currentTaskId.value = result.task_id || 'unknown'
+      taskMessages.value.push(`任务已提交，任务ID: ${currentTaskId.value}`)
+      
+      // 启动任务进度监听
+      startTaskProgressMonitoring(result.client_id)
+    } else {
+      throw new Error('任务提交失败，未获取到client_id')
+    }
+  } catch (error) {
+    console.error('提交渲染任务失败:', error)
+    taskMessages.value.push(`任务提交失败: ${error.message}`)
+    isTaskRunning.value = false
+  }
+}
+
+// 取消运行中的任务
+const cancelRunningTask = async () => {
+  if (!currentTaskId.value) {
+    alert('没有正在运行的任务')
+    return
+  }
+  
+  isCancelingTask.value = true
+  taskCancelMessage.value = '正在取消任务...'
+  
+  try {
+    const result = await queue.cancelTaskInComfyuiQueue(currentTaskId.value, 'interrupt')
+    taskCancelMessage.value = '任务已取消'
+    taskMessages.value.push('任务已中断')
+    
+    // 停止进度监听
+    stopTaskProgressMonitoring()
+    
+    // 重置任务状态
+    setTimeout(() => {
+      isTaskRunning.value = false
+      isCancelingTask.value = false
+      currentTaskId.value = ''
+      taskProgress.value = 0
+    }, 1000)
+  } catch (error) {
+    console.error('取消任务失败:', error)
+    taskCancelMessage.value = `取消失败: ${error.message}`
+    isCancelingTask.value = false
+  }
+}
+
 // 添加和移除事件监听器
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
@@ -197,6 +352,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  // 组件卸载时停止所有监听
+  stopTaskProgressMonitoring()
 })
 </script>
 
@@ -232,7 +389,9 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-        <button class="render-btn">渲染</button>
+        <button class="render-btn" @click="submitRenderTask" :disabled="isTaskRunning || isCancelingTask">
+          {{ isTaskRunning ? '渲染中...' : (isCancelingTask ? '取消中...' : '渲染') }}
+        </button>
       </div>
     </header>
 
@@ -247,7 +406,7 @@ onUnmounted(() => {
             <div class="screenshot-btn">
               <span class="camera-icon">📷</span>
             </div>
-            <button class="model-original-btn" @click="captureViewport" :disabled="isLoading">
+            <button class="model-original-btn" @click="captureViewport" :disabled="isLoading || isTaskRunning">
               {{ isLoading ? '获取中...' : '模型原图' }}
             </button>
           </div>
@@ -279,11 +438,28 @@ onUnmounted(() => {
           <div class="screenshot-content-area">
             <img :src="viewportScreenshot" alt="Rhino视口截图" class="viewport-screenshot" />
           </div>
+          
+          <!-- 任务进度条和控制按钮 -->
+          <div v-if="isTaskRunning" class="task-controls">
+            <div class="progress-container">
+              <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: taskProgress + '%' }"></div>
+              </div>
+              <span class="progress-text">{{ taskProgress }}%</span>
+            </div>
+            
+            <div class="task-buttons">
+              <button class="cancel-btn" @click="cancelRunningTask" :disabled="isCancelingTask">
+                {{ isCancelingTask ? '取消中...' : '取消任务' }}
+              </button>
+              <div v-if="taskCancelMessage" class="cancel-message">{{ taskCancelMessage }}</div>
+            </div>
+          </div>
         </div>
         
         <!-- 原有视口内容 -->
         <div v-else class="viewport-content">
-          <RhinoViewport />
+          <RhinoViewport @imageUploaded="handleImageUpload" />
           
           <!-- 底部预览图片 -->
           <div class="preview-gallery">
@@ -291,6 +467,18 @@ onUnmounted(() => {
               <img :src="`https://picsum.photos/80/60?random=${i+10}`" alt="预览图">
             </div>
             <button class="refresh-btn">🔄</button>
+          </div>
+        </div>
+        
+        <!-- 任务消息日志 -->
+        <div v-if="taskMessages.length > 0" class="task-logs">
+          <div class="logs-header">
+            <span>任务日志</span>
+          </div>
+          <div class="logs-content">
+            <div v-for="(message, index) in taskMessages.slice(-20)" :key="index" class="log-message">
+              {{ message }}
+            </div>
           </div>
         </div>
       </main>
@@ -623,6 +811,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   position: relative;
+  align-items: center;
+  justify-content: center;
 }
 
 .preview-gallery {
@@ -931,6 +1121,40 @@ onUnmounted(() => {
   border: 1px solid #ddd;
 }
 
+/* 上传的图片容器样式 */
+.uploaded-image-container {
+  text-align: center;
+  margin-top: 20px;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.uploaded-image-container h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.uploaded-image {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.image-info {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #666;
+}
+
+.image-info p {
+  margin: 5px 0;
+}
+
 /* 截图显示区域样式 */
 .screenshot-display-area {
   flex: 1;
@@ -992,6 +1216,107 @@ onUnmounted(() => {
   object-fit: contain;
 }
 
+/* 任务控制相关样式 */
+.task-controls {
+  padding: 20px;
+  background: #f8f9fa;
+  border-top: 1px solid #e0e0e0;
+}
+
+.progress-container {
+  margin-bottom: 15px;
+  position: relative;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50 0%, #8BC34A 100%);
+  transition: width 0.3s ease;
+  border-radius: 4px;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #666;
+  float: right;
+}
+
+.task-buttons {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cancel-btn {
+  padding: 8px 16px;
+  background: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.cancel-btn:hover {
+  background: #d32f2f;
+}
+
+.cancel-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.cancel-message {
+  font-size: 12px;
+  color: #666;
+}
+
+/* 任务日志样式 */
+.task-logs {
+  position: absolute;
+  bottom: 80px;
+  left: 20px;
+  right: 20px;
+  max-height: 200px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.logs-header {
+  padding: 10px 15px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.logs-content {
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 10px 15px;
+}
+
+.log-message {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 5px;
+  line-height: 1.4;
+}
+
 /* 按钮禁用状态 */
 .model-original-btn:disabled {
   background: #ccc;
@@ -999,6 +1324,16 @@ onUnmounted(() => {
 }
 
 .model-original-btn:disabled:hover {
+  background: #ccc;
+}
+
+/* 渲染按钮禁用状态 */
+.render-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.render-btn:disabled:hover {
   background: #ccc;
 }
 
