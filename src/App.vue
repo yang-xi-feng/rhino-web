@@ -2,6 +2,9 @@
 import RhinoViewport from './components/RhinoViewport.vue'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { queue, ws } from './api'
+import { uploadReferenceImage } from './api/upload.js'
+import api from './api/api.js';
+
 
 // 项目数据
 const projects = ref([
@@ -23,6 +26,10 @@ const renderSettings = ref({
 const viewportScreenshot = ref('')
 const isLoading = ref(false)
 const showScreenshot = ref(false)
+
+// 生成的图片相关数据
+const generatedImage = ref('')
+const showGeneratedImageWindow = ref(false)
 
 // 添加创意描述相关数据
 const showCreativeDescription = ref(false)
@@ -109,6 +116,9 @@ const taskMessages = ref([])
 const currentTaskId = ref('')
 const currentClientId = ref('')
 const taskCancelMessage = ref('')
+const progressCallbackRef = ref(null)
+// 渲染结果图片
+const renderedImage = ref('')
 
 const selectProject = (project) => {
   selectedProject.value = project
@@ -225,7 +235,24 @@ const handleClickOutside = (event) => {
 }
 
 // 处理任务进度更新
-const handleTaskProgress = (progress) => {
+const handleTaskProgress = (progressOrData) => {
+  let progress = 0
+  let resultImage = ''
+  
+  // 处理不同格式的进度数据
+  if (typeof progressOrData === 'object') {
+    // 如果是对象，从中提取进度和图片结果
+    progress = progressOrData.progress || progressOrData.value || 0
+    
+    // 检查是否有渲染结果图片
+    if (progressOrData.resultImage || progressOrData.imageUrl) {
+      resultImage = progressOrData.resultImage || progressOrData.imageUrl
+    }
+  } else {
+    // 如果是数字，直接使用
+    progress = progressOrData
+  }
+  
   taskProgress.value = progress
   taskMessages.value.push(`任务进度: ${progress}%`)
   
@@ -234,6 +261,21 @@ const handleTaskProgress = (progress) => {
     setTimeout(() => {
       isTaskRunning.value = false
       taskMessages.value.push('任务已完成！')
+      
+      // 保存渲染结果图片
+      if (resultImage) {
+        renderedImage.value = api.config.imgUrl +  resultImage
+        // 同时设置生成图片变量
+        generatedImage.value = api.config.imgUrl +  resultImage
+        // 自动显示生成图片窗口
+        showGeneratedImageWindow.value = true
+        
+        // 生成结束后关闭模型原图
+        showScreenshot.value = false
+        
+        taskMessages.value.push('渲染结果图片已获取')
+        console.log('渲染结果图片:', api.config.imgUrl +  resultImage)
+      }
     }, 1000)
   }
 }
@@ -243,9 +285,13 @@ const startTaskProgressMonitoring = (clientId) => {
   try {
     currentClientId.value = clientId
     ws.connectWithTaskId(clientId)
-    ws.onTaskProgress((progress) => {
+    
+    // 创建并保存回调函数引用
+    progressCallbackRef.value = (progress) => {
       handleTaskProgress(progress)
-    })
+    }
+    
+    ws.onTaskProgress(progressCallbackRef.value)
     taskMessages.value.push('开始监听任务进度...')
   } catch (error) {
     console.error('启动任务进度监听失败:', error)
@@ -253,10 +299,67 @@ const startTaskProgressMonitoring = (clientId) => {
   }
 }
 
+// 轮询队列状态
+let queuePollingInterval = null
+
+const startQueuePolling = (clientId) => {
+  // 清除之前可能存在的轮询
+  if (queuePollingInterval) {
+    clearInterval(queuePollingInterval)
+  }
+  
+  // 立即执行一次查询
+  checkQueueStatus(clientId)
+  
+  // 设置轮询，每2秒查询一次
+  queuePollingInterval = setInterval(() => {
+    checkQueueStatus(clientId)
+  }, 2000)
+}
+
+// 检查队列状态
+const checkQueueStatus = async (clientId) => {
+  try {
+    const queueResult = await getRabbitmqQueueList(clientId)
+    
+    if (queueResult && queueResult.success && queueResult.data) {
+      const content = queueResult.data.content || 0
+      
+      console.log('队列查询结果:', queueResult.data)
+      
+      // 判断是否有排队任务
+      if (content > 0) {
+        // 有排队任务，继续轮询
+        taskMessages.value.push(`队列中还有 ${content} 个任务等待处理...`)
+      } else {
+        // 没有排队任务，停止轮询并开始监听任务进度
+        if (queuePollingInterval) {
+          clearInterval(queuePollingInterval)
+          queuePollingInterval = null
+          taskMessages.value.push('当前无排队任务，开始监听任务进度')
+          startTaskProgressMonitoring(clientId)
+        }
+      }
+    } else {
+      // 查询失败，记录错误但继续尝试
+      console.error('队列查询失败:', queueResult?.error?.message || '未知错误')
+      taskMessages.value.push(`队列查询失败: ${queueResult?.error?.message || '未知错误'}`)
+    }
+  } catch (error) {
+    // 处理异常，继续轮询
+    console.error('队列查询异常:', error)
+    taskMessages.value.push(`队列查询异常: ${error.message}`)
+  }
+}
+
 // 停止任务进度监听
 const stopTaskProgressMonitoring = () => {
   try {
-    ws.offTaskProgress()
+    // 确保回调函数存在才调用offTaskProgress
+    if (progressCallbackRef.value && typeof progressCallbackRef.value === 'function') {
+      ws.offTaskProgress(progressCallbackRef.value)
+      progressCallbackRef.value = null
+    }
     ws.close()
     currentClientId.value = ''
     taskMessages.value.push('已停止任务进度监听')
@@ -265,11 +368,38 @@ const stopTaskProgressMonitoring = () => {
   }
 }
 
+// 导入敏感词校验接口
+import { checkSensitiveWords } from './api/moderation.js';
+// 导入队列查询接口
+import { getRabbitmqQueueList } from './api/queue.js';
+
 // 提交渲染任务
 const submitRenderTask = async () => {
   if (!viewportScreenshot.value) {
     alert('请先获取模型原图')
     return
+  }
+  
+  // 检查是否选择了设计类别
+  if (!selectedCategoryName.value || selectedCategoryName.value === '') {
+    // 如果没有选择类别，使用默认的"室内设计"
+    selectedCategoryName.value = '室内设计'
+    // 确保该类别有对应的描述数据
+    if (!creativeDescriptions.value[selectedCategoryName.value]) {
+      creativeDescriptions.value[selectedCategoryName.value] = {
+        positiveDescription: '',
+        negativeDescription: '',
+        referenceImages: [],
+        designStyle: '现代简约',
+        aspectRatio: '16:9',
+        atmosphere: '温馨舒适',
+        environment: '客厅'
+      }
+    }
+    
+    // 显示创意描述面板
+    showCreativeDescription.value = true
+    taskMessages.value.push('已使用默认的"室内设计"类别')
   }
   
   isTaskRunning.value = true
@@ -280,36 +410,249 @@ const submitRenderTask = async () => {
   try {
     // 准备任务参数
     const categoryData = creativeDescriptions.value[selectedCategoryName.value]
-    const taskParams = {
-      modelOriginalUrl: viewportScreenshot.value,
-      positiveDescription: categoryData.positiveDescription,
-      negativeDescription: categoryData.negativeDescription,
-      designStyle: categoryData.designStyle,
-      aspectRatio: categoryData.aspectRatio,
-      atmosphere: categoryData.atmosphere,
-      environment: categoryData.environment,
-      quality: renderSettings.value.quality,
-      lighting: renderSettings.value.lighting,
-      resolution: renderSettings.value.resolution
+    
+    // 确保categoryData存在
+    if (!categoryData) {
+      throw new Error('无法获取设计类别数据')
     }
     
-    // 调用任务下发API
-    taskMessages.value.push('正在提交渲染任务...')
-    const result = await queue.sendTaskToComfyuiQueue(taskParams)
+    // 1. 将模型原图（链接或base64）转换为文件对象
+    taskMessages.value.push('正在准备模型原图...')
     
-    if (result && result.client_id) {
-      currentTaskId.value = result.task_id || 'unknown'
-      taskMessages.value.push(`任务已提交，任务ID: ${currentTaskId.value}`)
+    // 辅助函数：将图片链接或base64转换为File对象
+    const convertImageToFile = async (imageData) => {
+      try {
+        if (!imageData) {
+          throw new Error('没有图片数据')
+        }
+        
+        // 检查是否为base64格式
+        if (imageData.startsWith('data:image')) {
+          taskMessages.value.push('检测到base64格式图片，正在转换...')
+          // base64转Blob
+          const parts = imageData.split(',');
+          if (parts.length < 2) {
+            throw new Error('无效的base64格式');
+          }
+          
+          const byteString = atob(parts[1]);
+          if (byteString.length === 0) {
+            throw new Error('base64数据为空');
+          }
+          
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          
+          for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+          }
+          
+          // 从base64头部提取原始MIME类型
+          const mimeString = parts[0].split(':')[1].split(';')[0];
+          const blob = new Blob([ab], { type: mimeString });
+          return new File([blob], 'model_original.png', { type: mimeString });
+        }
+        // 检查是否为URL格式
+        else if (imageData.startsWith('http') || imageData.startsWith('blob')) {
+          taskMessages.value.push('检测到图片URL，正在转换...')
+          // 使用fetch下载图片
+          const imgUrl = imageData.replace('https://fastly.picsum.photos', api.config.baseUrl + '/img')
+          const response = await fetch(imgUrl);
+          
+          // 检查HTTP响应状态
+          if (!response.ok) {
+            throw new Error(`下载图片失败: HTTP ${response.status}`);
+          }
+          
+          const blob = await response.blob();
+          // 使用原始blob的MIME类型
+          return new File([blob], 'model_original.png', { type: blob.type });
+        } else {
+          throw new Error('未知的图片格式');
+        }
+      } catch (error) {
+        console.error('转换图片失败:', error);
+        throw error;
+      }
+    }
+    
+    let uploadedImageUrl = ''
+    let imageContent = ''
+    try {
+      // 检查图片URL是否已经是来自imgUrl域名的URL
+      console.log('viewportScreenshot', viewportScreenshot.value)
+      const imgUrl = api.config.imgUrl
       
-      // 启动任务进度监听
-      startTaskProgressMonitoring(result.client_id)
-    } else {
-      throw new Error('任务提交失败，未获取到client_id')
+      // 如果是imgUrl域名下的URL，直接使用，不需要上传
+      if (viewportScreenshot.value && typeof viewportScreenshot.value === 'string') {
+        if (viewportScreenshot.value.startsWith(imgUrl)) {
+          taskMessages.value.push('检测到imgUrl域名下的图片，直接使用')
+          uploadedImageUrl = viewportScreenshot.value
+          // 提取content部分（去掉域名）
+          imageContent = uploadedImageUrl.replace(imgUrl, '')
+        } else if (viewportScreenshot.value.startsWith('http') && !viewportScreenshot.value.startsWith(imgUrl)) {
+          // 如果是其他域名的URL，需要上传
+          taskMessages.value.push('检测到其他域名的图片，准备上传...')
+          const imageFile = await convertImageToFile(viewportScreenshot.value)
+          console.log('imageFile', imageFile)
+          
+          taskMessages.value.push('正在上传图片...')
+          const uploadResult = await uploadReferenceImage(imageFile)
+          console.log('uploadResult', uploadResult)
+          
+          // 使用上传后的URL和content
+          uploadedImageUrl = uploadResult.url
+          imageContent = uploadResult.content
+        } else {
+          // 如果是base64或其他格式，需要上传
+          taskMessages.value.push('检测到非URL图片，准备上传...')
+          const imageFile = await convertImageToFile(viewportScreenshot.value)
+          console.log('imageFile', imageFile)
+          
+          taskMessages.value.push('正在上传图片...')
+          const uploadResult = await uploadReferenceImage(imageFile)
+          console.log('uploadResult', uploadResult)
+          
+          // 使用上传后的URL和content
+          uploadedImageUrl = uploadResult.url
+          imageContent = uploadResult.content
+        }
+      } else {
+        throw new Error('无效的图片数据')
+      }
+    } catch (uploadError) {
+      console.error('图片处理失败:', uploadError)
+      taskMessages.value.push(`图片处理失败，使用模拟地址: ${uploadError.message}`)
+      // 使用模拟地址继续流程
+      uploadedImageUrl = viewportScreenshot.value
+      imageContent = ''
+    }
+    
+    // 构建任务参数
+    const taskParams = {
+      // 必需参数
+      userid: 'default_user',
+      InI_LoadLineImage: imageContent || uploadedImageUrl, // 优先使用content部分
+      InI_LoadStyleRefImage: imageContent || uploadedImageUrl, // 优先使用content部分
+      InI_CustomPositivePrompt: categoryData.positiveDescription || 'modern interior design, high quality, detailed',
+      ModelId: '1904435462794121216',
+      ModelTypeId: '1904435045347627008',
+      
+      // 额外参数
+      InI_ImageRatio: categoryData.aspectRatio === '16:9' ? 0.5625 : 1,
+      makeLabel: JSON.stringify({
+        name: categoryData.environment || 'living room',
+        parentId: '0',
+        createTime: new Date().toISOString(),
+        id: Math.random().toString(36).substr(2, 9)
+      })
+    }
+    
+    // 执行敏感词校验
+    taskMessages.value.push('正在进行敏感词校验...')
+    
+    try {
+      // 使用正向描述内容作为prompt3参数进行敏感词校验
+      const moderationResult = await checkSensitiveWords({
+        prompt3: categoryData.positiveDescription
+      });
+      
+      // 检查校验结果
+      if (moderationResult && moderationResult.data && 
+          moderationResult.data.choices && 
+          moderationResult.data.choices[0] && 
+          moderationResult.data.choices[0].message && 
+          moderationResult.data.choices[0].message.content === '0') {
+        // 存在敏感词，终止任务并提示
+        taskMessages.value.push('检测到敏感词，任务提交失败')
+        alert('检测到敏感词，请修改正向描述内容后重试')
+        isTaskRunning.value = false
+        return
+      } else {
+        taskMessages.value.push('敏感词校验通过')
+      }
+    } catch (moderationError) {
+      console.error('敏感词校验出错:', moderationError)
+      taskMessages.value.push(`敏感词校验失败: ${moderationError.message}`)
+      alert('敏感词校验失败，请稍后重试')
+      isTaskRunning.value = false
+      return
+    }
+    
+    // 真实任务下发流程
+    taskMessages.value.push('正在提交渲染任务...')
+    
+    // 调用真实的任务下发接口
+    try {
+      const queueResult = await queue.sendTaskToComfyuiQueue(taskParams)
+      
+      console.log('任务下发返回结果:', queueResult)
+      
+      if (queueResult && queueResult.success && queueResult.data) {
+        // 记录返回的client_id和prompt_id
+        const taskId = queueResult.data.taskId || queueResult.data.client_id
+        const promptId = queueResult.data.prompt_id
+        const clientId = queueResult.data.client_id
+        
+        console.log('任务信息:', { taskId, promptId, clientId })
+        
+        currentTaskId.value = taskId
+        taskMessages.value.push(`任务已提交，任务ID: ${taskId}`)
+        taskMessages.value.push(`prompt_id: ${promptId}`)
+        taskMessages.value.push(`client_id: ${clientId}`)
+        
+        // 启动队列查询轮询
+        if (clientId) {
+          taskMessages.value.push('开始查询任务队列状态...')
+          startQueuePolling(clientId)
+        } else {
+          taskMessages.value.push('无法获取client_id，无法查询队列状态')
+        }
+      } else {
+        // 详细记录失败原因
+        const errorMessage = queueResult?.error?.message || queueResult?.message || '任务下发失败'
+        const errorCode = queueResult?.error?.code || 'UNKNOWN_ERROR'
+        console.error('任务下发失败:', { code: errorCode, message: errorMessage })
+        throw new Error(`任务下发失败: ${errorMessage} (代码: ${errorCode})`)
+      }
+    } catch (queueError) {
+      console.error('任务下发失败:', queueError)
+      taskMessages.value.push(`任务下发失败: ${queueError.message}`)
+      isTaskRunning.value = false
     }
   } catch (error) {
     console.error('提交渲染任务失败:', error)
     taskMessages.value.push(`任务提交失败: ${error.message}`)
     isTaskRunning.value = false
+  }
+}
+
+// 保存渲染结果图片
+const saveRenderedImage = () => {
+  if (!renderedImage.value) {
+    alert('没有可保存的渲染结果');
+    return;
+  }
+  
+  try {
+    // 创建下载链接
+    const link = document.createElement('a');
+    link.href = renderedImage.value;
+    
+    // 设置文件名
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    link.download = `render-result-${timestamp}.png`;
+    
+    // 模拟点击下载
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    taskMessages.value.push('渲染结果已保存');
+  } catch (error) {
+    console.error('保存图片失败:', error);
+    taskMessages.value.push(`保存图片失败: ${error.message}`);
+    alert(`保存图片失败: ${error.message}`);
   }
 }
 
@@ -324,18 +667,38 @@ const cancelRunningTask = async () => {
   taskCancelMessage.value = '正在取消任务...'
   
   try {
-    const result = await queue.cancelTaskInComfyuiQueue(currentTaskId.value, 'interrupt')
-    taskCancelMessage.value = '任务已取消'
-    taskMessages.value.push('任务已中断')
+    // 判断任务当前状态：如果queuePollingInterval存在，说明在轮询阶段；否则在WS生成阶段
+    const isInPollingPhase = !!queuePollingInterval
+    const cancelType = isInPollingPhase ? 'delete' : 'interrupt'
     
-    // 停止进度监听
-    stopTaskProgressMonitoring()
+    // 构造取消任务的参数对象
+    const cancelParams = {
+      type: cancelType,
+      prompt_id: [currentTaskId.value], // prompt_id需要是数组形式
+      client_id: currentClientId.value || currentTaskId.value // 优先使用client_id
+    }
+    
+    // 调用取消任务接口
+    const result = await queue.cancelTaskInComfyuiQueue(cancelParams)
+    taskCancelMessage.value = '任务已取消'
+    taskMessages.value.push(`任务已${isInPollingPhase ? '从队列中删除' : '中断'}`)
+    
+    // 如果在轮询阶段，清除轮询定时器
+    if (isInPollingPhase && queuePollingInterval) {
+      clearInterval(queuePollingInterval)
+      queuePollingInterval = null
+      taskMessages.value.push('已停止队列查询轮询')
+    } else {
+      // 停止进度监听
+      stopTaskProgressMonitoring()
+    }
     
     // 重置任务状态
     setTimeout(() => {
       isTaskRunning.value = false
       isCancelingTask.value = false
       currentTaskId.value = ''
+      currentClientId.value = ''
       taskProgress.value = 0
     }, 1000)
   } catch (error) {
@@ -348,6 +711,15 @@ const cancelRunningTask = async () => {
 // 添加和移除事件监听器
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  
+  // 监听生成图片事件
+  ws.on('generatedImages', (data) => {
+    if (data && data.mainImage) {
+      generatedImage.value = data.mainImage
+      showGeneratedImageWindow.value = true
+      console.log('收到生成的图片:', data.mainImage)
+    }
+  })
 })
 
 onUnmounted(() => {
@@ -455,10 +827,39 @@ onUnmounted(() => {
               <div v-if="taskCancelMessage" class="cancel-message">{{ taskCancelMessage }}</div>
             </div>
           </div>
+          
+          <!-- 渲染结果图片显示 -->
+          <div v-if="!isTaskRunning && renderedImage" class="rendered-result">
+            <div class="result-header">
+              <h3>渲染结果</h3>
+            </div>
+            <div class="result-content">
+              <img :src="renderedImage" alt="渲染结果" class="rendered-image" />
+            </div>
+            <div class="result-actions">
+              <button class="save-btn" @click="saveRenderedImage">保存图片</button>
+              <button class="new-render-btn" @click="closeScreenshot">新的渲染</button>
+            </div>
+          </div>
         </div>
         
-        <!-- 原有视口内容 -->
-        <div v-else class="viewport-content">
+        <!-- 生成图片的区域 -->
+        <div v-if="showGeneratedImageWindow && generatedImage" class="generated-image-area">
+          <div class="generated-header">
+            <h3>生成图片</h3>
+            <button class="close-btn" @click="showGeneratedImageWindow = false">×</button>
+          </div>
+          <div class="generated-content-area">
+            <img :src="generatedImage" alt="生成图片" class="generated-image" />
+          </div>
+          <div class="generated-actions">
+            <button class="save-btn" @click="saveRenderedImage">保存图片</button>
+            <button class="new-render-btn" @click="showGeneratedImageWindow = false">新的渲染</button>
+          </div>
+        </div>
+        
+        <!-- 原有视口内容 - 只有当没有模型原图且没有生成图片窗口时才显示 -->
+        <div v-if="!showScreenshot && !showGeneratedImageWindow" class="viewport-content">
           <RhinoViewport @imageUploaded="handleImageUpload" />
           
           <!-- 底部预览图片 -->
@@ -625,865 +1026,5 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.render-vista {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background-color: #f5f5f5;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-/* 顶部标题栏 */
-.top-bar {
-  height: 50px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  color: white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-}
-
-.logo-icon {
-  font-size: 20px;
-}
-
-.top-controls {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.quality-slider {
-  width: 100px;
-}
-
-.render-mode {
-  padding: 4px 8px;
-  border: none;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.2);
-  color: white;
-}
-
-.render-btn {
-  background: #4CAF50;
-  color: white;
-  border: none;
-  padding: 6px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 500;
-}
-
-/* 主布局 */
-.main-layout {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
-/* 左侧边栏 */
-.sidebar {
-  width: 250px;
-  background: white;
-  border-right: 1px solid #e0e0e0;
-  display: flex;
-  flex-direction: column;
-}
-
-
-
-.project-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px;
-}
-
-.project-item {
-  display: block;
-  padding: 8px;
-  margin-bottom: 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.project-item:hover {
-  background-color: #f5f5f5;
-}
-
-.project-item.active {
-  background-color: #e3f2fd;
-  border-left: 3px solid #2196F3;
-}
-
-.project-thumbnail {
-  width: 100%;
-  height: 80px;
-  object-fit: cover;
-  border-radius: 4px;
-}
-
-.screenshot-btn {
-  width: 100%;
-  height: 80px;
-  background: #f0f0f0;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.screenshot-btn:hover {
-  background: #e0e0e0;
-}
-
-.camera-icon {
-  font-size: 18px;
-}
-
-.screenshot-item:hover {
-  background-color: #f5f5f5;
-}
-
-.project-info h4 {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.model-original-btn {
-  width: 100%;
-  height: 30px;
-  margin-top: -3px;
-  background: #2196F3;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.model-original-btn:hover {
-  background: #1976D2;
-}
-
-.sidebar-footer {
-  padding: 15px;
-  border-top: 1px solid #e0e0e0;
-}
-
-.more-projects {
-  width: 100%;
-  padding: 8px;
-  background: none;
-  border: none;
-  color: #666;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-/* 中间视口区域 */
-.viewport-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: #fafafa;
-}
-
-
-
-.viewport-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  align-items: center;
-  justify-content: center;
-}
-
-.preview-gallery {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-  background: rgba(255,255,255,0.9);
-  padding: 10px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.gallery-item img {
-  width: 60px;
-  height: 40px;
-  object-fit: cover;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.refresh-btn {
-  width: 30px;
-  height: 30px;
-  border: none;
-  background: #f0f0f0;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* 右侧控制面板 */
-.control-panel {
-  width: 280px;
-  background: white;
-  border-left: 1px solid #e0e0e0;
-  overflow-y: auto;
-}
-
-/* 创意描述面板样式 */
-.creative-description-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.creative-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px 20px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.creative-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 16px;
-  color: #333;
-}
-
-.star-icon {
-  font-size: 18px;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  color: #666;
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: background-color 0.2s;
-}
-
-.close-btn:hover {
-  background: #e0e0e0;
-}
-
-.description-section {
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px 20px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  background: white;
-}
-
-.section-header:hover {
-  background: #f8f9fa;
-}
-
-.section-title {
-  font-weight: 500;
-  font-size: 14px;
-  color: #333;
-}
-
-.expand-icon {
-  font-size: 12px;
-  color: #666;
-  transition: transform 0.3s ease;
-}
-
-.expand-icon.expanded {
-  transform: rotate(180deg);
-}
-
-.section-content {
-  padding: 0 20px 15px 20px;
-  background: #fafafa;
-  animation: slideDown 0.3s ease;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    max-height: 0;
-  }
-  to {
-    opacity: 1;
-    max-height: 200px;
-  }
-}
-
-.description-textarea {
-  width: 100%;
-  min-height: 80px;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 12px;
-  resize: vertical;
-  font-family: inherit;
-}
-
-.description-textarea:focus {
-  outline: none;
-  border-color: #4CAF50;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.action-btn {
-  flex: 1;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 4px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.generate-btn {
-  background: #4CAF50;
-  color: white;
-}
-
-.generate-btn:hover {
-  background: #45a049;
-}
-
-.correct-btn {
-  background: #2196F3;
-  color: white;
-}
-
-.correct-btn:hover {
-  background: #1976D2;
-}
-
-.reference-images-area {
-  padding: 10px 0;
-}
-
-.upload-area {
-  border: 2px dashed #ddd;
-  border-radius: 4px;
-  padding: 20px;
-  text-align: center;
-  cursor: pointer;
-  transition: border-color 0.2s;
-  color: #666;
-  font-size: 12px;
-}
-
-.upload-area:hover {
-  border-color: #4CAF50;
-  color: #4CAF50;
-}
-
-.upload-icon {
-  display: block;
-  font-size: 24px;
-  margin-bottom: 8px;
-}
-
-.style-select {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 12px;
-  background: white;
-}
-
-.style-select:focus {
-  outline: none;
-  border-color: #4CAF50;
-}
-
-.panel-section {
-  padding: 20px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.panel-section h3 {
-  margin: 0 0 15px 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.panel-section h4 {
-  margin: 0 0 10px 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-}
-
-
-
-.setting-group {
-  margin-bottom: 15px;
-}
-
-.setting-group label {
-  display: block;
-  margin-bottom: 5px;
-  font-size: 12px;
-  color: #666;
-}
-
-.setting-group select {
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.env-btn {
-  width: 100%;
-  padding: 8px;
-  background: #f5f5f5;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.panel-actions {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.action-btn {
-  padding: 10px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 500;
-}
-
-.action-btn.primary {
-  background: #4CAF50;
-  color: white;
-}
-
-.action-btn.secondary {
-  background: #f5f5f5;
-  color: #333;
-  border: 1px solid #ddd;
-}
-
-/* 上传的图片容器样式 */
-.uploaded-image-container {
-  text-align: center;
-  margin-top: 20px;
-  padding: 15px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.uploaded-image-container h3 {
-  margin: 0 0 15px 0;
-  color: #333;
-  font-size: 16px;
-}
-
-.uploaded-image {
-  max-width: 100%;
-  max-height: 400px;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.image-info {
-  margin-top: 10px;
-  font-size: 12px;
-  color: #666;
-}
-
-.image-info p {
-  margin: 5px 0;
-}
-
-/* 截图显示区域样式 */
-.screenshot-display-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: white;
-}
-
-.screenshot-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px 20px;
-  border-bottom: 1px solid #e0e0e0;
-  background: #f8f9fa;
-}
-
-.screenshot-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #333;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #666;
-  padding: 0;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: background-color 0.2s;
-}
-
-.close-btn:hover {
-  background: #e0e0e0;
-}
-
-.screenshot-content-area {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: #fafafa;
-}
-
-.viewport-screenshot {
-  max-width: 100%;
-  max-height: 100%;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  object-fit: contain;
-}
-
-/* 任务控制相关样式 */
-.task-controls {
-  padding: 20px;
-  background: #f8f9fa;
-  border-top: 1px solid #e0e0e0;
-}
-
-.progress-container {
-  margin-bottom: 15px;
-  position: relative;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  background: #e0e0e0;
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 5px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #4CAF50 0%, #8BC34A 100%);
-  transition: width 0.3s ease;
-  border-radius: 4px;
-}
-
-.progress-text {
-  font-size: 12px;
-  color: #666;
-  float: right;
-}
-
-.task-buttons {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.cancel-btn {
-  padding: 8px 16px;
-  background: #f44336;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.2s;
-}
-
-.cancel-btn:hover {
-  background: #d32f2f;
-}
-
-.cancel-btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.cancel-message {
-  font-size: 12px;
-  color: #666;
-}
-
-/* 任务日志样式 */
-.task-logs {
-  position: absolute;
-  bottom: 80px;
-  left: 20px;
-  right: 20px;
-  max-height: 200px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-}
-
-.logs-header {
-  padding: 10px 15px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e0e0e0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-}
-
-.logs-content {
-  max-height: 160px;
-  overflow-y: auto;
-  padding: 10px 15px;
-}
-
-.log-message {
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 5px;
-  line-height: 1.4;
-}
-
-/* 按钮禁用状态 */
-.model-original-btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.model-original-btn:disabled:hover {
-  background: #ccc;
-}
-
-/* 渲染按钮禁用状态 */
-.render-btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.render-btn:disabled:hover {
-  background: #ccc;
-}
-
-/* 设计类别选择页面样式 */
-.design-categories-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: white;
-}
-
-.categories-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px 20px;
-  border-bottom: 1px solid #e0e0e0;
-  background: #f8f9fa;
-}
-
-.categories-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #333;
-}
-
-.categories-content {
-  flex: 1;
-  padding: 20px;
-  overflow-y: auto;
-}
-
-.categories-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(4, 1fr);
-  gap: 12px;
-  max-width: 500px;
-  margin: 0 auto;
-  padding: 10px;
-}
-
-.category-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: white;
-  border: 1px solid #e0e0e0;
-}
-
-.category-item:hover {
-  background: #f5f5f5;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-
-/* 下拉菜单样式 */
-.render-mode-container {
-  position: relative;
-  display: inline-block;
-}
-
-.design-categories-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 1000;
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  padding: 10px;
-  /* width: 280px; */
-  /* max-width: 90vw; */
-}
-
-.categories-grid-dropdown {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  /* max-height: 250px; */
-  /* overflow-y: auto; */
-}
-
-.category-item-dropdown {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: white;
-  border: 1px solid #e0e0e0;
-}
-
-.category-item-dropdown:hover {
-  background: #f5f5f5;
-  transform: translateY(-1px);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-.category-image-dropdown {
-  width: 45px;
-  height: 35px;
-  margin-bottom: 3px;
-  overflow: hidden;
-  border-radius: 3px;
-}
-
-.category-image-dropdown img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.category-name-dropdown {
-  font-size: 9px;
-  font-weight: normal;
-  color: #333;
-  text-align: center;
-  line-height: 1.1;
-  word-break: break-all;
-}
-
-.category-image {
-  width: 90px;
-  height: 70px;
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 6px;
-}
-
-.category-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.category-name {
-  font-size: 11px;
-  font-weight: 400;
-  color: #333;
-  text-align: center;
-  line-height: 1.1;
-  min-height: 12px;
-}
+@import './style/app-styles.css';
 </style>

@@ -44,6 +44,10 @@ export const generateUUID = () => {
  */
 export const sendTaskToComfyuiQueue = async (taskParams, additionalParams = {}) => {
   try {
+    // 生成client_id和prompt_id
+    const clientId = generateUUID();
+    const promptId = generateUUID();
+    
     // 构建完整的请求参数
     const requestData = {
       // 必需参数
@@ -88,8 +92,8 @@ export const sendTaskToComfyuiQueue = async (taskParams, additionalParams = {}) 
       messageType: "postMakeImage",
       toggleSD: false,
       toggleFlux: false,
-      client_id: generateUUID(),
-      prompt_id: generateUUID(),
+      client_id: clientId,
+      prompt_id: promptId,
       
       // 合并额外参数，覆盖默认值
       ...additionalParams
@@ -104,9 +108,17 @@ export const sendTaskToComfyuiQueue = async (taskParams, additionalParams = {}) 
     
     // 根据状态码405处理Method Not Allowed的情况
     // 注意：在api.js中已经处理了HTTP错误，这里可以根据业务逻辑进一步处理
+    // 由于API返回不包含client_id和prompt_id，我们手动添加这些字段到返回数据中
+    const resultData = {
+      ...response,
+      client_id: clientId,
+      prompt_id: promptId,
+      taskId: clientId // 用client_id作为taskId
+    };
+    
     return {
       success: true,
-      data: response,
+      data: resultData,
       message: '任务下发成功'
     };
   } catch (error) {
@@ -227,10 +239,47 @@ export const cancelTaskInComfyuiQueue = async (cancelParams) => {
   }
 };
 
+/**
+ * 查询RabbitMQ队列列表
+ * @param {string} clientId - 客户端ID
+ * @returns {Promise} - 返回队列查询结果
+ */
+export const getRabbitmqQueueList = async (clientId) => {
+  try {
+    // 调用队列查询接口
+    console.log('正在查询RabbitMQ队列状态:', clientId);
+    const response = await api.get('/AI/AIModel/GetRabbitmqQueueList', {
+      client_id: clientId
+    });
+    
+    // 处理接口返回的结果
+    console.log('队列查询结果:', response);
+    
+    return {
+      success: true,
+      data: response,
+      message: '队列查询成功'
+    };
+  } catch (error) {
+    // 处理请求过程中的错误
+    console.error('队列查询失败:', error);
+    
+    // 返回标准化的错误信息
+    return {
+      success: false,
+      error: {
+        code: error.code || 'QUEUE_LIST_FAILED',
+        message: error.message || '队列查询过程中发生错误'
+      }
+    };
+  }
+};
+
 export default {
   sendTaskToComfyuiQueue,
   prepareAndSubmitRenderTask,
   cancelTaskInComfyuiQueue,
+  getRabbitmqQueueList,
   generate16DigitNumber,
   generateUUID
 };

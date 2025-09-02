@@ -25,29 +25,31 @@ export const uploadReferenceImage = async (file) => {
     
     // 创建FormData对象
     const formData = new FormData();
+    // 将文件转换为Blob对象
     formData.append('file', file);
-    
     // 发送上传请求
-    const response = await api.post('/AI/AIModel/uploadReferenceImage', formData, {
-      headers: {
-        // 对于FormData，Content-Type会自动设置为multipart/form-data
-        // 这里不需要显式设置Content-Type
-      },
-    });
+    const responseData = await api.post('/AI/AIModel/uploadReferenceImage', formData);
     
-    // 处理响应，根据实际接口返回格式调整
-    if (typeof response === 'string') {
-      // 如果返回的是直接的链接字符串
-      return response;
-    } else if (response.data && response.data.url) {
-      // 如果返回的是包含url字段的对象
-      return response.data.url;
-    } else if (response.url) {
-      // 如果返回的是包含url字段的对象
-      return response.url;
+    // 检查响应数据
+    if (responseData && responseData.content) {
+      // 确保返回的URL格式正确，避免重复的baseUrl
+      const content = responseData.content;
+      if (content.startsWith('http')) {
+        return {
+          url: String(content),
+          content: content
+        }
+      } else {
+        // 避免在URL中出现重复的斜杠
+        const baseUrl = api.config.imgUrl.endsWith('/') ? api.config.imgUrl.slice(0, -1) : api.config.imgUrl;
+        const path = content.startsWith('/') ? content : '/' + content;
+        return {
+          url: baseUrl + path,
+          content: content
+        }
+      }
     } else {
-      // 默认处理，尝试转换为字符串
-      return String(response);
+      throw new Error('上传成功但未返回有效的图片URL')
     }
   } catch (error) {
     console.error('上传图片失败:', error);

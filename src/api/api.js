@@ -1,6 +1,7 @@
 // 基础API配置
 const API_CONFIG = {
-  baseUrl: 'http://jz-arch-ai-render-vue.test.crfsdi-gw.com',
+  baseUrl: 'http://localhost:5173/api',
+  imgUrl: 'http://jz-arch-ai-render-vue.test.crfsdi-gw.com',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -17,11 +18,17 @@ const request = async (url, options = {}) => {
   // 构建完整的请求URL
   const fullUrl = url.startsWith('http') ? url : `${API_CONFIG.baseUrl}${url}`;
   
+  // 如果请求体是FormData，不应该添加默认的Content-Type
+  let headers = {};
+  if (!(options.body instanceof FormData)) {
+    headers = API_CONFIG.headers;
+  }
+  
   // 合并默认选项和用户选项
   const fetchOptions = {
     ...options,
     headers: {
-      ...API_CONFIG.headers,
+      ...headers,
       ...options.headers,
     },
     credentials: 'include', // 包含cookie

@@ -63,7 +63,7 @@ class WebSocketManager {
       return;
     }
     
-    const baseUrl = 'ws://jz-arch-ai-render-vue.prod.crfsdi-gw.com/wsRedis';
+    const baseUrl = 'ws://jz-arch-ai-render-vue.test.crfsdi-gw.com/wsRedis';
     const url = `${baseUrl}?key=${clientId}`;
     
     console.log(`使用client_id ${clientId} 连接WebSocket服务器: ${url}`);
@@ -182,21 +182,92 @@ class WebSocketManager {
   handleMessage(event) {
     try {
       // 尝试解析JSON格式的消息
-      const data = JSON.parse(event.data);
+      let data = JSON.parse(event.data);
       this.emit('message', data);
       
       // 如果消息包含type字段，也触发对应的事件
       if (data.type) {
         this.emit(data.type, data);
-        
-        // 特殊处理任务进度消息
-        if (data.type === 'str' && typeof data.value === 'number') {
-          this.emit('taskProgress', data.value);
+      }
+      console.log('收到消息:', data);
+      // 处理任务进度消息 - 更灵活的处理方式
+      // 1. 处理标准格式: { type: 'taskProgress', progress: 数字 }
+      if (data.type === 'taskProgress' && typeof data.progress === 'number') {
+        this.emit('taskProgress', data.progress);
+        // 如果包含图片结果，也传递给回调
+        if (data.resultImage || data.imageUrl) {
+          this.emit('taskProgress', { 
+            progress: data.progress, 
+            resultImage: data.resultImage, 
+            imageUrl: data.imageUrl 
+          });
+        }
+      }
+      // 2. 处理原有的字符串格式: { type: 'str', value: 数字 }
+      else if (data.type === 'str' && typeof data.value === 'number') {
+        this.emit('taskProgress', data.value);
+      }
+      // 3. 处理可能的其他格式，直接检查是否有progress字段
+      else if (typeof data.progress === 'number') {
+        this.emit('taskProgress', data.progress);
+        // 如果包含图片结果，也传递给回调
+        if (data.resultImage || data.imageUrl) {
+          this.emit('taskProgress', { 
+            progress: data.progress, 
+            resultImage: data.resultImage, 
+            imageUrl: data.imageUrl 
+          });
+        }
+      }
+      // 4. 检查是否包含渲染结果图片
+      else if (data.resultImage || data.imageUrl) {
+        // 即使没有明确的进度，也触发完成事件
+        const progressData = {
+          progress: 100, // 默认为完成状态
+          resultImage: data.resultImage,
+          imageUrl: data.imageUrl
+        };
+        this.emit('taskProgress', progressData);
+      }
+      // 5. 处理数组格式的消息，例如: [{type: 'output', value: '图片路径'}]
+      else if (Array.isArray(data) && data.length > 0) {
+        // 检查数组中是否包含output类型的消息
+        const outputMessages = data.filter(item => item.type === 'output' && item.value);
+        if (outputMessages.length > 0) {
+          // 提取图片路径
+          const imagePaths = outputMessages.map(item => item.value);
+          // 假设第一个图片是主要输出结果
+          const firstImagePath = imagePaths[0];
+          
+          // 构建完整的图片URL（根据用户描述，需要拼接ImgUrl）
+          // 注意：这里可能需要根据实际情况调整URL的拼接逻辑
+          const completeImageUrl = firstImagePath; // 暂时直接使用返回的路径，后续可能需要拼接
+          
+          // 触发任务完成事件，并包含图片结果
+          const progressData = {
+            progress: 100, // 默认为完成状态
+            resultImage: completeImageUrl,
+            imageUrl: completeImageUrl,
+            allImages: imagePaths // 保存所有图片路径
+          };
+          this.emit('taskProgress', progressData);
+          // 同时触发一个专门的生成图片事件，便于App.vue处理
+          this.emit('generatedImages', { images: imagePaths, mainImage: completeImageUrl });
         }
       }
     } catch (error) {
-      // 如果不是JSON格式，直接传递原始数据
-      this.emit('message', event.data);
+      // 如果不是JSON格式，尝试其他可能的格式解析
+      console.warn('无法解析JSON消息:', error.message);
+      
+      // 检查是否是纯数字字符串
+      const numericValue = parseFloat(event.data);
+      if (!isNaN(numericValue)) {
+        // 如果是纯数字，视为进度值
+        this.emit('taskProgress', numericValue);
+      } else {
+        // 否则直接传递原始数据
+        this.emit('message', event.data);
+      }
     }
   }
 

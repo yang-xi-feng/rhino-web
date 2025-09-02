@@ -19,8 +19,9 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
+import { uploadReferenceImage } from '../api/upload';
 
 // 定义emit事件，用于向父组件传递图片信息
 const emit = defineEmits(['imageUploaded']);
@@ -34,27 +35,15 @@ const triggerFileInput = () => {
 };
 
 // 处理文件上传
-const handleFileUpload = (event) => {
-  const file = event.target.files[0];
-  if (file) {
-    // 读取文件并生成预览
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      previewImage.value = e.target.result;
-      // 向父组件发送图片信息
-      emit('imageUploaded', {
-        src: e.target.result,
-        name: file.name,
-        size: file.size,
-        type: file.type
-      });
-    };
-    reader.readAsDataURL(file);
-    
-    // 清空input值，允许重复上传同一文件
-    event.target.value = '';
+const handleFileUpload = async (event) => {
+  const file = event.target.files[0] as File;
+  if (!file) {
+    return;
   }
-};
+  
+  const res = await uploadReferenceImage(file);
+  emit('imageUploaded', {src: res.url, content: res.content});
+}
 </script>
 
 <style scoped>
