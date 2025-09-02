@@ -1,9 +1,62 @@
 <script setup>
 import RhinoViewport from './components/RhinoViewport.vue'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { queue, ws } from './api'
 import { uploadReferenceImage } from './api/upload.js'
 import api from './api/api.js';
+
+// ArcIns ImageToolkit API客户端类
+class ArcInsImageToolkitAPI {
+  constructor(baseUrl = 'http://192.10.222.123:8001/api/v1/external') {
+    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.defaultHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+  }
+
+  async makeRequest(method, endpoint, params = null) {
+    const url = new URL(`${this.baseUrl}${endpoint}`);
+    
+    if (params && method === 'GET') {
+      Object.keys(params).forEach(key => {
+        if (params[key] !== null && params[key] !== undefined) {
+          url.searchParams.append(key, params[key]);
+        }
+      });
+    }
+
+    const options = {
+      method,
+      headers: this.defaultHeaders
+    };
+
+    try {
+      const response = await fetch(url.toString(), options);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.detail || `HTTP ${response.status}: ${response.statusText}`;
+        } catch {
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`请求失败: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async getImage(imageId) {
+    return await this.makeRequest('GET', `/images/${imageId}`);
+  }
+}
 
 
 // 项目数据
@@ -31,9 +84,17 @@ const showScreenshot = ref(false)
 const generatedImage = ref('')
 const showGeneratedImageWindow = ref(false)
 
+// 图片对比相关数据
+const sliderPosition = ref(50) // 分割线位置，百分比
+const isDragging = ref(false)
+const comparisonContainer = ref(null)
+
 // 添加创意描述相关数据
 const showCreativeDescription = ref(false)
 const selectedCategoryName = ref('')
+
+// 图片选择器弹框相关数据
+const showImageSelector = ref(false)
 
 // 各个区域的展开状态
 const expandedSections = ref({
@@ -58,6 +119,9 @@ const creativeDescriptions = ref({
     environment: '客厅'
   }
 })
+
+// 创建ArcIns ImageToolkit API实例
+const imageToolkitAPI = new ArcInsImageToolkitAPI()
 
 // 上传的图片信息
 const uploadedImage = ref(null)
@@ -113,6 +177,7 @@ const isTaskRunning = ref(false)
 const isCancelingTask = ref(false)
 const taskProgress = ref(0)
 const taskMessages = ref([])
+const showTaskLogs = ref(false)
 const currentTaskId = ref('')
 const currentClientId = ref('')
 const taskCancelMessage = ref('')
@@ -165,6 +230,70 @@ const captureViewport = async () => {
 // 关闭截图显示
 const closeScreenshot = () => {
   showScreenshot.value = false
+}
+
+// 关闭图片对比显示
+const closeImageComparison = () => {
+  showScreenshot.value = false
+  showGeneratedImageWindow.value = false
+  sliderPosition.value = 50 // 重置分割线位置
+}
+
+// 保存渲染图片
+const saveRenderedImage = () => {
+  if (generatedImage.value) {
+    const link = document.createElement('a')
+    link.href = generatedImage.value
+    link.download = `rendered_image_${Date.now()}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+}
+
+// 开始拖动分割线
+const startDragging = (event) => {
+  event.preventDefault()
+  isDragging.value = true
+  
+  const updateSliderPosition = (percentage) => {
+    sliderPosition.value = percentage
+    // 更新CSS变量以实现图片裁剪效果
+    if (comparisonContainer.value) {
+      comparisonContainer.value.style.setProperty('--slider-position', percentage + '%')
+    }
+  }
+  
+  const handleMouseMove = (e) => {
+    if (!isDragging.value || !comparisonContainer.value) return
+    
+    const rect = comparisonContainer.value.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100))
+    updateSliderPosition(percentage)
+  }
+  
+  const handleTouchMove = (e) => {
+    if (!isDragging.value || !comparisonContainer.value) return
+    
+    const rect = comparisonContainer.value.getBoundingClientRect()
+    const x = e.touches[0].clientX - rect.left
+    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100))
+    updateSliderPosition(percentage)
+  }
+  
+  const stopDragging = () => {
+    isDragging.value = false
+    document.removeEventListener('mousemove', handleMouseMove)
+    document.removeEventListener('mouseup', stopDragging)
+    document.removeEventListener('touchmove', handleTouchMove)
+    document.removeEventListener('touchend', stopDragging)
+  }
+  
+  document.addEventListener('mousemove', handleMouseMove)
+  document.addEventListener('mouseup', stopDragging)
+  document.addEventListener('touchmove', handleTouchMove)
+  document.addEventListener('touchend', stopDragging)
 }
 
 // 处理渲染模式点击
@@ -225,6 +354,130 @@ const closeDesignCategories = () => {
   showDesignCategories.value = false
 }
 
+// 关闭任务日志
+const closeTaskLogs = () => {
+  showTaskLogs.value = false
+}
+
+// 打开图片选择器
+const openImageSelector = () => {
+  showImageSelector.value = true
+}
+
+// 关闭图片选择器
+const closeImageSelector = () => {
+  showImageSelector.value = false
+}
+
+// 删除参考图片
+const removeReferenceImage = (index) => {
+  if (selectedCategoryName.value && creativeDescriptions.value[selectedCategoryName.value]) {
+    creativeDescriptions.value[selectedCategoryName.value].referenceImages.splice(index, 1)
+  }
+}
+
+// 上传状态跟踪
+const isWaitingForImageUpload = ref(false)
+const imgUrl = ref('')
+let uploadTimeoutId = null
+
+// 全局消息处理函数
+const handleGlobalMessage = async (event) => {
+  // 只处理图片上传相关的消息
+  if (!event.data || !event.data.imageId) {
+    return
+  }
+  const imageId = '101'
+  // const imageId = event.data.imageId
+  console.log('获取到图片ID:', imageId)
+  
+  // 清除超时定时器
+  if (uploadTimeoutId) {
+    clearTimeout(uploadTimeoutId)
+    uploadTimeoutId = null
+  }
+  
+  // 重置等待状态
+  isWaitingForImageUpload.value = false
+  
+  try {
+    // 使用API获取图片数据
+    const imageData = await imageToolkitAPI.getImage(imageId)
+    console.log('获取到图片数据:', imageData)
+    if (imageData && imageData.minio_url) {
+      // 将图片URL转换为File对象并上传
+      const response = await fetch(imageData.minio_url)
+      const blob = await response.blob()
+      const file = new File([blob], imageData.filename || 'reference-image.jpg', { type: blob.type })
+      
+      // 上传图片
+      const uploadResult = await uploadReferenceImage(file)
+      console.log('图片上传成功:', uploadResult)
+      
+      // 将上传的图片添加到参考图片列表
+      if (selectedCategoryName.value && creativeDescriptions.value[selectedCategoryName.value]) {
+        creativeDescriptions.value[selectedCategoryName.value].referenceImages.push({
+          id: Date.now(),
+          url: uploadResult.url,
+          name: file.name
+        })
+      }
+      
+      if (uploadResult.content) {
+        imgUrl.value = uploadResult.url
+      }
+      // 关闭图片选择器
+      closeImageSelector()
+      alert('图片上传成功！')
+    } else {
+      throw new Error('无法获取图片数据')
+    }
+  } catch (error) {
+    console.error('处理图片失败:', error)
+    alert(`处理图片失败: ${error.message}`)
+  }
+}
+
+// 处理上传
+const handleUpload = async () => {
+  try {
+    // 检查是否已经在等待上传
+    if (isWaitingForImageUpload.value) {
+      console.log('已有上传操作在进行中')
+      return
+    }
+    
+    // 从iframe获取选中的图片ID
+    const iframe = document.querySelector('.embedded-webpage')
+    if (!iframe || !iframe.contentWindow) {
+      throw new Error('无法访问iframe内容')
+    }
+    
+    // 设置等待状态
+    isWaitingForImageUpload.value = true
+    
+    // 通过postMessage与iframe通信获取选中的图片ID
+    iframe.contentWindow.postMessage({ action: 'getSelectedImageId' }, '*')
+    
+    // 设置超时，如果5秒内没有收到响应则取消
+    uploadTimeoutId = setTimeout(() => {
+      isWaitingForImageUpload.value = false
+      uploadTimeoutId = null
+      console.log('上传操作超时')
+      alert('上传操作超时，请重试')
+    }, 5000)
+    
+  } catch (error) {
+    isWaitingForImageUpload.value = false
+    if (uploadTimeoutId) {
+      clearTimeout(uploadTimeoutId)
+      uploadTimeoutId = null
+    }
+    console.error('上传操作失败:', error)
+    alert(`上传操作失败: ${error.message}`)
+  }
+}
+
 // 点击外部区域关闭下拉菜单
 const handleClickOutside = (event) => {
   const dropdown = document.querySelector('.design-categories-dropdown')
@@ -256,6 +509,9 @@ const handleTaskProgress = (progressOrData) => {
   taskProgress.value = progress
   taskMessages.value.push(`任务进度: ${progress}%`)
   
+  // 有新消息时自动显示任务日志
+  // showTaskLogs.value = true
+  
   // 任务完成时的处理
   if (progress >= 100) {
     setTimeout(() => {
@@ -270,8 +526,8 @@ const handleTaskProgress = (progressOrData) => {
         // 自动显示生成图片窗口
         showGeneratedImageWindow.value = true
         
-        // 生成结束后关闭模型原图
-        showScreenshot.value = false
+        // 保持模型原图显示，实现对比功能
+        // showScreenshot.value = false // 注释掉这行，保持原图显示
         
         taskMessages.value.push('渲染结果图片已获取')
         console.log('渲染结果图片:', api.config.imgUrl +  resultImage)
@@ -293,9 +549,11 @@ const startTaskProgressMonitoring = (clientId) => {
     
     ws.onTaskProgress(progressCallbackRef.value)
     taskMessages.value.push('开始监听任务进度...')
+    // showTaskLogs.value = true
   } catch (error) {
     console.error('启动任务进度监听失败:', error)
     taskMessages.value.push(`进度监听失败: ${error.message}`)
+    // showTaskLogs.value = true
   }
 }
 
@@ -533,7 +791,7 @@ const submitRenderTask = async () => {
       // 必需参数
       userid: 'default_user',
       InI_LoadLineImage: imageContent || uploadedImageUrl, // 优先使用content部分
-      InI_LoadStyleRefImage: imageContent || uploadedImageUrl, // 优先使用content部分
+      InI_LoadStyleRefImage: imgUrl.value, // 优先使用content部分
       InI_CustomPositivePrompt: categoryData.positiveDescription || 'modern interior design, high quality, detailed',
       ModelId: '1904435462794121216',
       ModelTypeId: '1904435045347627008',
@@ -627,34 +885,7 @@ const submitRenderTask = async () => {
   }
 }
 
-// 保存渲染结果图片
-const saveRenderedImage = () => {
-  if (!renderedImage.value) {
-    alert('没有可保存的渲染结果');
-    return;
-  }
-  
-  try {
-    // 创建下载链接
-    const link = document.createElement('a');
-    link.href = renderedImage.value;
-    
-    // 设置文件名
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    link.download = `render-result-${timestamp}.png`;
-    
-    // 模拟点击下载
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    taskMessages.value.push('渲染结果已保存');
-  } catch (error) {
-    console.error('保存图片失败:', error);
-    taskMessages.value.push(`保存图片失败: ${error.message}`);
-    alert(`保存图片失败: ${error.message}`);
-  }
-}
+
 
 // 取消运行中的任务
 const cancelRunningTask = async () => {
@@ -712,6 +943,9 @@ const cancelRunningTask = async () => {
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
   
+  // 添加全局消息监听器
+  window.addEventListener('message', handleGlobalMessage)
+  
   // 监听生成图片事件
   ws.on('generatedImages', (data) => {
     if (data && data.mainImage) {
@@ -720,10 +954,27 @@ onMounted(() => {
       console.log('收到生成的图片:', data.mainImage)
     }
   })
+  
+  // 初始化CSS变量
+  nextTick(() => {
+    if (comparisonContainer.value) {
+      comparisonContainer.value.style.setProperty('--slider-position', '50%')
+    }
+  })
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  
+  // 移除全局消息监听器
+  window.removeEventListener('message', handleGlobalMessage)
+  
+  // 清理上传相关的定时器
+  if (uploadTimeoutId) {
+    clearTimeout(uploadTimeoutId)
+    uploadTimeoutId = null
+  }
+  
   // 组件卸载时停止所有监听
   stopTaskProgressMonitoring()
 })
@@ -795,20 +1046,16 @@ onUnmounted(() => {
         </div>
         
         <div class="sidebar-footer">
-          <button class="more-projects">查看更多项目 ></button>
         </div>
       </aside>
 
       <!-- 中间主视口 -->
       <main class="viewport-area">
-        <!-- 截图显示区域 -->
-        <div v-if="showScreenshot" class="screenshot-display-area">
-          <div class="screenshot-header">
-            <h3>模型原图</h3>
-            <button class="close-btn" @click="closeScreenshot">×</button>
-          </div>
-          <div class="screenshot-content-area">
-            <img :src="viewportScreenshot" alt="Rhino视口截图" class="viewport-screenshot" />
+        <!-- 图片对比显示区域 -->
+        <div v-if="(showScreenshot && viewportScreenshot) || (showGeneratedImageWindow && generatedImage)" class="image-comparison-area">
+          <div class="comparison-header">
+            <h3>{{ showScreenshot && showGeneratedImageWindow ? '图片对比' : (showScreenshot ? '模型原图' : '生成图片') }}</h3>
+            <button class="close-btn" @click="closeImageComparison">×</button>
           </div>
           
           <!-- 任务进度条和控制按钮 -->
@@ -828,33 +1075,50 @@ onUnmounted(() => {
             </div>
           </div>
           
-          <!-- 渲染结果图片显示 -->
-          <div v-if="!isTaskRunning && renderedImage" class="rendered-result">
-            <div class="result-header">
-              <h3>渲染结果</h3>
+          <!-- 图片对比内容区域 -->
+          <div v-if="!isTaskRunning" class="comparison-content">
+            <!-- 当只有一张图片时的显示 -->
+            <div v-if="!showScreenshot || !showGeneratedImageWindow" class="single-image-display">
+              <img v-if="showScreenshot" :src="viewportScreenshot" alt="模型原图" class="single-image" />
+              <img v-else-if="showGeneratedImageWindow" :src="generatedImage" alt="生成图片" class="single-image" />
             </div>
-            <div class="result-content">
-              <img :src="renderedImage" alt="渲染结果" class="rendered-image" />
-            </div>
-            <div class="result-actions">
-              <button class="save-btn" @click="saveRenderedImage">保存图片</button>
-              <button class="new-render-btn" @click="closeScreenshot">新的渲染</button>
+            
+            <!-- 当有两张图片时的对比显示 -->
+            <div v-else class="image-comparison-container" ref="comparisonContainer">
+              <!-- 原图（左侧） -->
+              <div class="original-image-container">
+                <img :src="viewportScreenshot" alt="模型原图" class="comparison-image original-image" />
+                <div class="image-label original-label">模型原图</div>
+              </div>
+              
+              <!-- 生成图（右侧，带遮罩） -->
+              <div class="generated-image-container">
+                <img :src="generatedImage" alt="生成图片" class="comparison-image generated-image" />
+                <div class="image-label generated-label">生成图片</div>
+              </div>
+              
+              <!-- 可拖动的分割线 -->
+              <div 
+                class="comparison-slider" 
+                :style="{ left: sliderPosition + '%' }"
+                @mousedown="startDragging"
+                @touchstart="startDragging"
+              >
+                <div class="slider-handle">
+                  <div class="slider-line"></div>
+                  <div class="slider-circle">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                      <path d="M8 6L12 10L16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M8 18L12 14L16 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-        
-        <!-- 生成图片的区域 -->
-        <div v-if="showGeneratedImageWindow && generatedImage" class="generated-image-area">
-          <div class="generated-header">
-            <h3>生成图片</h3>
-            <button class="close-btn" @click="showGeneratedImageWindow = false">×</button>
-          </div>
-          <div class="generated-content-area">
-            <img :src="generatedImage" alt="生成图片" class="generated-image" />
-          </div>
-          <div class="generated-actions">
-            <button class="save-btn" @click="saveRenderedImage">保存图片</button>
-            <button class="new-render-btn" @click="showGeneratedImageWindow = false">新的渲染</button>
+          
+          <!-- 操作按钮 -->
+          <div v-if="!isTaskRunning" class="comparison-actions">
           </div>
         </div>
         
@@ -872,9 +1136,10 @@ onUnmounted(() => {
         </div>
         
         <!-- 任务消息日志 -->
-        <div v-if="taskMessages.length > 0" class="task-logs">
+        <div v-if="taskMessages.length > 0 && showTaskLogs" class="task-logs">
           <div class="logs-header">
             <span>任务日志</span>
+            <button class="close-btn" @click="closeTaskLogs">×</button>
           </div>
           <div class="logs-content">
             <div v-for="(message, index) in taskMessages.slice(-20)" :key="index" class="log-message">
@@ -946,7 +1211,19 @@ onUnmounted(() => {
             </div>
             <div v-if="expandedSections.referenceImages" class="section-content">
               <div class="reference-images-area">
-                <div class="upload-area">
+                <!-- 已上传的参考图片 -->
+                <div v-if="creativeDescriptions[selectedCategoryName] && creativeDescriptions[selectedCategoryName].referenceImages.length > 0" class="uploaded-images">
+                  <div v-for="(image, index) in creativeDescriptions[selectedCategoryName].referenceImages" :key="image.id" class="reference-image-item">
+                    <img :src="image.url" :alt="image.name" class="reference-thumbnail" />
+                    <div class="image-info">
+                      <span class="image-name">{{ image.name }}</span>
+                      <button class="remove-btn" @click="removeReferenceImage(index)">×</button>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 上传按钮 -->
+                <div class="upload-area" @click="openImageSelector">
                   <span class="upload-icon">📁</span>
                   <span>点击上传参考图片</span>
                 </div>
@@ -1022,6 +1299,30 @@ onUnmounted(() => {
       </aside>
     </div>
 
+  </div>
+
+  <!-- 图片选择器弹框 -->
+  <div v-if="showImageSelector" class="modal-overlay" @click="closeImageSelector">
+    <div class="image-selector-modal" @click.stop>
+      <div class="modal-header">
+        <h3>选择参考图片</h3>
+        <button class="close-btn" @click="closeImageSelector">×</button>
+      </div>
+      <div class="modal-content">
+        <iframe 
+          src="http://192.10.222.106:3000/" 
+          class="embedded-webpage"
+          frameborder="0"
+          allowfullscreen>
+        </iframe>
+      </div>
+      <div class="modal-footer">
+        <button class="upload-btn" @click="handleUpload">
+          <span class="upload-icon">📤</span>
+          上传
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
