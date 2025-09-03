@@ -1,12 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "wGhusVibJvg=",
+  "dgSpecHash": "+bZfs6Zs0VQ=",
   "success": true,
-  "projectFilePath": "C:\\Users\\12052\\Desktop\\LatestSpeckleCode\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj",
+  "projectFilePath": "D:\\workspace2\\ai\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\12052\\.nuget\\packages\\microsoft.web.webview2\\1.0.1901.177\\microsoft.web.webview2.1.0.1901.177.nupkg.sha512",
-    "C:\\Users\\12052\\.nuget\\packages\\rhinocommon\\8.0.23304.9001\\rhinocommon.8.0.23304.9001.nupkg.sha512",
-    "C:\\Users\\12052\\.nuget\\packages\\system.drawing.common\\6.0.0\\system.drawing.common.6.0.0.nupkg.sha512"
+    "C:\\Users\\Administrator\\.nuget\\packages\\microsoft.web.webview2\\1.0.1901.177\\microsoft.web.webview2.1.0.1901.177.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\rhinocommon\\8.21.25188.17001\\rhinocommon.8.21.25188.17001.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\system.drawing.common\\6.0.0\\system.drawing.common.6.0.0.nupkg.sha512"
   ],
   "logs": []
 }

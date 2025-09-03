@@ -228,22 +228,23 @@ const renderModeSettings = ref({
     singleColor: '#808080'
   },
   visibility: {
-    showCurves: true,
-    showConstructionLines: false,
-    showIsocurves: false,
-    showMeshWires: false,
-    showMeshVertices: false,
-    showMeshEdges: false,
-    showMeshBoundaries: false,
-    showMeshNormals: false,
-    showGridLines: false,
-    showCurves2: true,
-    showLights: false,
-    showCameras: false,
-    showText: false,
-    showDimensions: false,
-    showPoints: false,
-    showClouds: false
+    showSurfaceEdges: true,        // 曲面边线
+    showCurves: true,       // 曲线
+    showIsoCurves: false,    // 正功边线
+    showMeshWires: false,    // 正功装线
+    showLights: false,       // 灯光
+    showText: false,         // 文字
+    showPoints: false,       // 点物件
+    showClouds: false,       // 点云
+    showAnnotations: false,   // 注解
+    showPointClouds: false,   // 点云
+    showTangentEdges: false, // 正切边线
+    showTangencySeams: false, // 正切接缝
+    showClippingPlanes: false, // 裁剪平面
+    showSubDEdges: true,      // 是否显示细分线框
+    showSubDCreases: true,    // 是否显示细分锐边
+    showSubDBoundary: true,   // 是否显示细分边界
+    showSubDReflectionPlanePreview: true // 是否显示细分对称
   },
   lighting: {
     mode: '场景照明',
@@ -1847,43 +1848,44 @@ onUnmounted(() => {
             <div v-if="expandedSettingsSections.visibility" class="section-content">
               <div class="checkbox-group">
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showCurves" type="checkbox" />
+                  <input v-model="renderModeSettings.visibility.showSurfaceEdges" type="checkbox" />
                   显示曲面边线
                 </label>
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showConstructionLines" type="checkbox" />
+                  <input v-model="renderModeSettings.visibility.showIsoCurves" type="checkbox" />
                   显示结构线
                 </label>
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showIsocurves" type="checkbox" />
-                  显示正功边线
+                  <input v-model="renderModeSettings.visibility.showTangentEdges" type="checkbox" />
+                  显示正切边线
                 </label>
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showMeshWires" type="checkbox" />
-                  显示正功装线
+                  <input v-model="renderModeSettings.visibility.showTangencySeams" type="checkbox" />
+                  显示正切接缝
+                </label>
+                <!-- 在现有 visibility 相关复选框区域添加以下复选框 -->
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showSubDEdges" type="checkbox" />
+                  显示细分线框
                 </label>
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showMeshVertices" type="checkbox" />
-                  显示细分指线
+                  <input v-model="renderModeSettings.visibility.showSubDCreases" type="checkbox" />
+                  显示细分锐边
                 </label>
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showMeshEdges" type="checkbox" />
-                  显示细分边边
-                </label>
-                <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showMeshBoundaries" type="checkbox" />
+                  <input v-model="renderModeSettings.visibility.showSubDBoundary" type="checkbox" />
                   显示细分边界
                 </label>
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showMeshNormals" type="checkbox" />
+                  <input v-model="renderModeSettings.visibility.showSubDReflectionPlanePreview" type="checkbox" />
                   显示细分对称
                 </label>
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showGridLines" type="checkbox" />
-                  显示网格框线
+                  <input v-model="renderModeSettings.visibility.showMeshWires" type="checkbox" />
+                  显示网格线框
                 </label>
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showCurves2" type="checkbox" />
+                  <input v-model="renderModeSettings.visibility.showCurves" type="checkbox" />
                   显示曲线
                 </label>
                 <label class="checkbox-label">
@@ -1891,23 +1893,23 @@ onUnmounted(() => {
                   显示灯光
                 </label>
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showCameras" type="checkbox" />
-                  显示摄影机
-                </label>
-                <label class="checkbox-label">
                   <input v-model="renderModeSettings.visibility.showText" type="checkbox" />
                   显示文字
                 </label>
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showDimensions" type="checkbox" />
+                  <input v-model="renderModeSettings.visibility.showAnnotations" type="checkbox" />
                   显示注解
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showClippingPlanes" type="checkbox" />
+                  显示截平面
                 </label>
                 <label class="checkbox-label">
                   <input v-model="renderModeSettings.visibility.showPoints" type="checkbox" />
                   显示点物件
                 </label>
                 <label class="checkbox-label">
-                  <input v-model="renderModeSettings.visibility.showClouds" type="checkbox" />
+                  <input v-model="renderModeSettings.visibility.showPointClouds" type="checkbox" />
                   显示点云
                 </label>
               </div>

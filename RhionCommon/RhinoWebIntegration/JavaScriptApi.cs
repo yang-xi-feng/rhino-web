@@ -155,6 +155,17 @@ namespace RhinoWebIntegration
                 
                 // 更新显示模式
                 DisplayModeDescription.UpdateDisplayMode(newMode);
+                // 切换到新增的显示模式
+                if (newMode != null)
+                {
+                    foreach (var view in doc.Views)
+                    {
+                        if (view != null && view.ActiveViewport != null)
+                        {
+                            view.ActiveViewport.DisplayMode = newMode;
+                        }
+                    }
+                }
                 
                 // 刷新视图以显示新的显示模式
                 doc.Views.Redraw();
@@ -321,20 +332,21 @@ namespace RhinoWebIntegration
                 {
                     // 基础元素可见性设置
                     settings.Visibility.ShowCurves = json.Contains("\"showCurves\":true");
-                    settings.Visibility.ShowConstructionLines = json.Contains("\"showConstructionLines\":true");
-                    settings.Visibility.ShowIsocurves = json.Contains("\"showIsocurves\":true");
+                    settings.Visibility.ShowIsoCurves = json.Contains("\"showIsoCurves\":true");
                     settings.Visibility.ShowMeshWires = json.Contains("\"showMeshWires\":true");
-                    settings.Visibility.ShowMeshVertices = json.Contains("\"showMeshVertices\":true");
-                    settings.Visibility.ShowMeshEdges = json.Contains("\"showMeshEdges\":true");
-                    settings.Visibility.ShowMeshBoundaries = json.Contains("\"showMeshBoundaries\":true");
-                    settings.Visibility.ShowMeshNormals = json.Contains("\"showMeshNormals\":true");
-                    settings.Visibility.ShowGridLines = json.Contains("\"showGridLines\":true");
                     settings.Visibility.ShowLights = json.Contains("\"showLights\":true");
-                    settings.Visibility.ShowCameras = json.Contains("\"showCameras\":true");
                     settings.Visibility.ShowText = json.Contains("\"showText\":true");
-                    settings.Visibility.ShowDimensions = json.Contains("\"showDimensions\":true");
                     settings.Visibility.ShowPoints = json.Contains("\"showPoints\":true");
-                    settings.Visibility.ShowClouds = json.Contains("\"showClouds\":true");
+                    settings.Visibility.ShowSurfaceEdges = json.Contains("\"showSurfaceEdges\":true");
+                    settings.Visibility.ShowAnnotations = json.Contains("\"showAnnotations\":true");
+                    settings.Visibility.ShowPointClouds = json.Contains("\"showPointClouds\":true");
+                    settings.Visibility.ShowTangentEdges = json.Contains("\"showTangentEdges\":true");
+                    settings.Visibility.ShowTangencySeams = json.Contains("\"showTangencySeams\":true");
+                    settings.Visibility.ShowClippingPlanes = json.Contains("\"showClippingPlanes\":true");
+                    settings.Visibility.ShowSubDEdges = json.Contains("\"showSubDEdges\":true");
+                    settings.Visibility.ShowSubDCreases = json.Contains("\"showSubDCreases\":true");
+                    settings.Visibility.ShowSubDBoundary = json.Contains("\"showSubDBoundary\":true");
+                    settings.Visibility.ShowSubDReflectionPlanePreview = json.Contains("\"showSubDReflectionPlanePreview\":true");
                     
                     // 背景渐变设置
                     if (json.Contains("\"gradientTopColor\""))
@@ -602,31 +614,35 @@ namespace RhinoWebIntegration
                             RhinoApp.WriteLine($"○ 网格线设置失败: {ex.Message}");
                         }
                     }
-                    
+
                     // 记录其他配置（DisplayPipelineAttributes不直接支持的属性）
-                    RhinoApp.WriteLine($"○ 显示对象: {settings.Shading.ShowObjects}");
-                    RhinoApp.WriteLine($"○ 显示线框: {settings.Shading.ShowWireframe}");
-                    RhinoApp.WriteLine($"○ 平面着色: {settings.Shading.FlatShading}");
-                    RhinoApp.WriteLine($"○ 显示曲线: {settings.Visibility.ShowCurves}");
-                    RhinoApp.WriteLine($"○ 显示构造线: {settings.Visibility.ShowConstructionLines}");
-                    RhinoApp.WriteLine($"○ 显示点: {settings.Visibility.ShowPoints}");
-                    RhinoApp.WriteLine($"○ 显示点云: {settings.Visibility.ShowClouds}");
-                    RhinoApp.WriteLine($"○ 显示文本: {settings.Visibility.ShowText}");
-                    RhinoApp.WriteLine($"○ 显示注解: {settings.Visibility.ShowDimensions}");
-                    RhinoApp.WriteLine($"○ 显示灯光: {settings.Visibility.ShowLights}");
-                    RhinoApp.WriteLine($"○ 显示相机: {settings.Visibility.ShowCameras}");
-                    RhinoApp.WriteLine($"○ 显示网格边界: {settings.Visibility.ShowMeshBoundaries}");
-                    RhinoApp.WriteLine($"○ 显示网格法线: {settings.Visibility.ShowMeshNormals}");
-                    RhinoApp.WriteLine($"○ 显示网格顶点: {settings.Visibility.ShowMeshVertices}");
-                    RhinoApp.WriteLine($"○ 显示网格边: {settings.Visibility.ShowMeshEdges}");
-                    RhinoApp.WriteLine($"○ 显示网格线: {settings.Visibility.ShowGridLines}");
-                    RhinoApp.WriteLine($"○ 地平面显示: {settings.GroundPlane.Show}, 高度: {settings.GroundPlane.Height}");
-                    RhinoApp.WriteLine($"○ 显示顶点颜色: {settings.Shading.ShowVertexColors}");
-                    RhinoApp.WriteLine($"○ 材质显示: {settings.Shading.MaterialDisplay}");
-                    RhinoApp.WriteLine($"○ 光泽度: {settings.Shading.Glossiness}");
-                    RhinoApp.WriteLine($"○ 单一颜色: {settings.Shading.SingleColor}");
-                    RhinoApp.WriteLine($"○ 工作流设置: 输入Gamma={settings.Workflow.InputGamma}, 输出Gamma={settings.Workflow.OutputGamma}");
-                    RhinoApp.WriteLine($"○ 照明模式: {settings.Lighting.Mode}, 环境颜色: {settings.Lighting.AmbientColor}");
+                    attrs.ShowCurves = settings.Visibility.ShowCurves;
+                    attrs.ShowIsoCurves = settings.Visibility.ShowIsoCurves;
+                    attrs.ShowPointClouds = settings.Visibility.ShowPointClouds;
+                    attrs.ShowPoints = settings.Visibility.ShowPoints;
+                    attrs.ShowText = settings.Visibility.ShowText;
+                    attrs.ShowLights = settings.Visibility.ShowLights;
+                    // 是否显示曲面边缘
+                    attrs.ShowSurfaceEdges = settings.Visibility.ShowSurfaceEdges;
+                    attrs.ShowTangentEdges = settings.Visibility.ShowTangentEdges;
+                    attrs.ShowTangentSeams = settings.Visibility.ShowTangencySeams;
+                    attrs.ShowClippingPlanes = settings.Visibility.ShowClippingPlanes;
+                    attrs.ShowAnnotations = settings.Visibility.ShowAnnotations;
+                    attrs.MeshSpecificAttributes.ShowMeshWires = settings.Visibility.ShowMeshWires;
+                    attrs.ShowSubDBoundary = settings.Visibility.ShowSubDBoundary;
+                    attrs.ShowSubDCreases = settings.Visibility.ShowSubDCreases;
+                    attrs.ShowSubDReflectionPlanePreview = settings.Visibility.ShowSubDReflectionPlanePreview;
+                    attrs.ShowSubDEdges = settings.Visibility.ShowSubDEdges;
+
+                    string hexColor = settings.Lighting.AmbientColor;
+                    if (hexColor.StartsWith("#"))
+                    {
+                        hexColor = hexColor.Substring(1);
+                        int argbValue = int.Parse(hexColor, System.Globalization.NumberStyles.HexNumber);
+                        Color color = Color.FromArgb(argbValue);
+                        attrs.AmbientLightingColor = color;
+                    }
+
                 }
                 
                 RhinoApp.WriteLine($"========== RenderMode设置应用完成 ==========");
@@ -690,21 +706,38 @@ namespace RhinoWebIntegration
     public class VisibilitySettings
     {
         // 基础可见性设置（记录用途，DisplayPipelineAttributes不直接支持）
+        // 是否显示曲面边缘
+        public bool ShowSurfaceEdges { get; set; } = true;
+        // 正切边缘
+        public bool ShowTangentEdges { get; set; } = true;
+        // 是否显示正切接缝
+        public bool ShowTangencySeams { get; set; } = true;
+        // 是否显示细分线框
+        public bool ShowSubDEdges { get; set; } = true;
+        // 是否显示细分锐边
+        public bool ShowSubDCreases { get; set; } = true;
+        // 是否显示细分边界
+        public bool ShowSubDBoundary { get; set; } = true;
+        // 是否显示细分对称
+        public bool ShowSubDReflectionPlanePreview { get; set; } = true;
+        // 是否显示截平面
+        public bool ShowClippingPlanes { get; set; } = true;
+        // 是否显示注解
+        public bool ShowAnnotations { get; set; } = true;
+        // 显示结构线
+        public bool ShowIsoCurves { get; set; } = true;
+        // 显示网格线
+        public bool ShowMeshWires { get; set; } = true;
+        // 显示曲线
         public bool ShowCurves { get; set; } = true;
-        public bool ShowConstructionLines { get; set; } = false;
-        public bool ShowIsocurves { get; set; } = false;
-        public bool ShowMeshWires { get; set; } = false;
-        public bool ShowMeshVertices { get; set; } = false;
-        public bool ShowMeshEdges { get; set; } = false;
-        public bool ShowMeshBoundaries { get; set; } = false;
-        public bool ShowMeshNormals { get; set; } = false;
-        public bool ShowGridLines { get; set; } = false;
+        // 是否显示灯光
         public bool ShowLights { get; set; } = false;
-        public bool ShowCameras { get; set; } = false;
+        // 是否显示文字
         public bool ShowText { get; set; } = false;
-        public bool ShowDimensions { get; set; } = false;
+        // 是否显示点物件
         public bool ShowPoints { get; set; } = false;
-        public bool ShowClouds { get; set; } = false;
+        // 是否显示点云
+        public bool ShowPointClouds { get; set; } = false;
         
         // 背景渐变设置（基于DisplayPipelineAttributes.SetFill方法）
         public string GradientTopColor { get; set; } = "";

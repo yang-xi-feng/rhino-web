@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\12052\\Desktop\\LatestSpeckleCode\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj": {}
+    "D:\\workspace2\\ai\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj": {}
   },
   "projects": {
-    "C:\\Users\\12052\\Desktop\\LatestSpeckleCode\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj": {
+    "D:\\workspace2\\ai\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\12052\\Desktop\\LatestSpeckleCode\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj",
+        "projectUniqueName": "D:\\workspace2\\ai\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj",
         "projectName": "RhinoWebIntegration",
-        "projectPath": "C:\\Users\\12052\\Desktop\\LatestSpeckleCode\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj",
-        "packagesPath": "C:\\Users\\12052\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\12052\\Desktop\\LatestSpeckleCode\\rhino-web\\RhionCommon\\RhinoWebIntegration\\obj\\",
+        "projectPath": "D:\\workspace2\\ai\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj",
+        "packagesPath": "C:\\Users\\Administrator\\.nuget\\packages\\",
+        "outputPath": "D:\\workspace2\\ai\\rhino-web\\RhionCommon\\RhinoWebIntegration\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
-          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+          "D:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\12052\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\Administrator\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -43,7 +43,8 @@
           "enableAudit": "true",
           "auditLevel": "low",
           "auditMode": "direct"
-        }
+        },
+        "SdkAnalysisLevel": "9.0.100"
       },
       "frameworks": {
         "net48": {
@@ -56,14 +57,14 @@
             "RhinoCommon": {
               "include": "Compile, Build, Native, ContentFiles, Analyzers, BuildTransitive",
               "target": "Package",
-              "version": "[8.0.23304.9001, )"
+              "version": "[8.21.25188.17001, )"
             },
             "System.Drawing.Common": {
               "target": "Package",
               "version": "[6.0.0, )"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.303\\RuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.101\\RuntimeIdentifierGraph.json"
         }
       }
     }

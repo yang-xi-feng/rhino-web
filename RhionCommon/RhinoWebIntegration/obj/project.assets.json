@@ -44,7 +44,7 @@
           }
         }
       },
-      "RhinoCommon/8.0.23304.9001": {
+      "RhinoCommon/8.21.25188.17001": {
         "type": "package",
         "compile": {
           "lib/net48/Ed.Eto.dll": {
@@ -173,15 +173,17 @@
         "tools/wv2winrt/zh-Hant/System.CommandLine.resources.dll"
       ]
     },
-    "RhinoCommon/8.0.23304.9001": {
-      "sha512": "hWuqXjcj/eb1/z8+bml4Bav/8Oug2p6t0mAVf37GhX9sP+M1aYNO9FappqeN8oefcIBkLBmAzr46DYNhTxFAGQ==",
+    "RhinoCommon/8.21.25188.17001": {
+      "sha512": "Wo6JXheyDBvilyIwDY6xZCQJC4170jzAlTSlMgh8yokUY+vYyCl4KJVXZofIOynNt/xx5wLqb2On5gZZekXR6w==",
       "type": "package",
-      "path": "rhinocommon/8.0.23304.9001",
+      "path": "rhinocommon/8.21.25188.17001",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
         "Eto-LICENSE.txt",
         "build/net48/RhinoCommon.targets",
+        "build/net7.0/RhinoCommon.props",
+        "build/net7.0/RhinoCommon.targets",
         "lib/net48/Ed.Eto.dll",
         "lib/net48/Ed.Eto.xml",
         "lib/net48/Eto.dll",
@@ -189,7 +191,14 @@
         "lib/net48/Rhino.UI.dll",
         "lib/net48/RhinoCommon.dll",
         "lib/net48/RhinoCommon.xml",
-        "rhinocommon.8.0.23304.9001.nupkg.sha512",
+        "lib/net7.0/Ed.Eto.dll",
+        "lib/net7.0/Ed.Eto.xml",
+        "lib/net7.0/Eto.dll",
+        "lib/net7.0/Eto.xml",
+        "lib/net7.0/Rhino.UI.dll",
+        "lib/net7.0/RhinoCommon.dll",
+        "lib/net7.0/RhinoCommon.xml",
+        "rhinocommon.8.21.25188.17001.nupkg.sha512",
         "rhinocommon.nuspec",
         "rhinocommon.png"
       ]
@@ -237,28 +246,28 @@
   "projectFileDependencyGroups": {
     ".NETFramework,Version=v4.8": [
       "Microsoft.Web.WebView2 >= 1.0.1901.177",
-      "RhinoCommon >= 8.0.23304.9001",
+      "RhinoCommon >= 8.21.25188.17001",
       "System.Drawing.Common >= 6.0.0"
     ]
   },
   "packageFolders": {
-    "C:\\Users\\12052\\.nuget\\packages\\": {},
-    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
+    "C:\\Users\\Administrator\\.nuget\\packages\\": {},
+    "D:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\12052\\Desktop\\LatestSpeckleCode\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj",
+      "projectUniqueName": "D:\\workspace2\\ai\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj",
       "projectName": "RhinoWebIntegration",
-      "projectPath": "C:\\Users\\12052\\Desktop\\LatestSpeckleCode\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj",
-      "packagesPath": "C:\\Users\\12052\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\12052\\Desktop\\LatestSpeckleCode\\rhino-web\\RhionCommon\\RhinoWebIntegration\\obj\\",
+      "projectPath": "D:\\workspace2\\ai\\rhino-web\\RhionCommon\\RhinoWebIntegration\\RhinoWebIntegration.csproj",
+      "packagesPath": "C:\\Users\\Administrator\\.nuget\\packages\\",
+      "outputPath": "D:\\workspace2\\ai\\rhino-web\\RhionCommon\\RhinoWebIntegration\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
-        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        "D:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
       ],
       "configFilePaths": [
-        "C:\\Users\\12052\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\Administrator\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
@@ -284,7 +293,8 @@
         "enableAudit": "true",
         "auditLevel": "low",
         "auditMode": "direct"
-      }
+      },
+      "SdkAnalysisLevel": "9.0.100"
     },
     "frameworks": {
       "net48": {
@@ -297,14 +307,14 @@
           "RhinoCommon": {
             "include": "Compile, Build, Native, ContentFiles, Analyzers, BuildTransitive",
             "target": "Package",
-            "version": "[8.0.23304.9001, )"
+            "version": "[8.21.25188.17001, )"
           },
           "System.Drawing.Common": {
             "target": "Package",
             "version": "[6.0.0, )"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.303\\RuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.101\\RuntimeIdentifierGraph.json"
       }
     }
   }
