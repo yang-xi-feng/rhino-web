@@ -187,6 +187,76 @@ const progressCallbackRef = ref(null)
 // 渲染结果图片
 const renderedImage = ref('')
 
+// 设置弹窗相关状态
+const showSettingsModal = ref(false)
+const expandedSettingsSections = ref({
+  viewport: true,
+  workflow: false,
+  shading: false,
+  background: false,
+  visibility: false,
+  lighting: false
+})
+const renderModeSettings = ref({
+  name: 'RenderMode',
+  background: {
+    type: '单一颜色',
+    mode: '使用正面设置'
+  },
+  groundPlane: {
+    show: false,
+    showShadow: false,
+    height: 0.00,
+    autoHeight: true
+  },
+  workflow: {
+    adjustInputColors: false,
+    adjustInputTextures: false,
+    inputGamma: 1.00,
+    adjustOutputColors: false,
+    adjustOutputTextures: false,
+    outputGamma: 1.00
+  },
+  shading: {
+    showObjects: true,
+    showWireframe: false,
+    flatShading: false,
+    showVertexColors: false,
+    materialDisplay: '使用物件颜色',
+    glossiness: 0,
+    transparency: 0,
+    singleColor: '#808080'
+  },
+  visibility: {
+    showCurves: true,
+    showConstructionLines: false,
+    showIsocurves: false,
+    showMeshWires: false,
+    showMeshVertices: false,
+    showMeshEdges: false,
+    showMeshBoundaries: false,
+    showMeshNormals: false,
+    showGridLines: false,
+    showCurves2: true,
+    showLights: false,
+    showCameras: false,
+    showText: false,
+    showDimensions: false,
+    showPoints: false,
+    showClouds: false
+  },
+  lighting: {
+    mode: '场景照明',
+    ambientColor: '#ffffff',
+    useAdvancedGPU: false
+  }
+})
+
+// 切换设置分组的展开状态
+const toggleSettingsSection = (sectionName) => {
+  expandedSettingsSections.value[sectionName] = !expandedSettingsSections.value[sectionName]
+}
+
 const selectProject = (project) => {
   selectedProject.value = project
 }
@@ -213,6 +283,59 @@ const closeHistoryModal = () => {
 const selectHistoryItem = (item) => {
   selectRenderResult(item)
   closeHistoryModal()
+}
+
+// 打开设置弹窗
+const openSettingsModal = () => {
+  showSettingsModal.value = true
+}
+
+// 关闭设置弹窗
+const closeSettingsModal = () => {
+  showSettingsModal.value = false
+}
+
+// 创建RenderMode
+const createRenderMode = async () => {
+  try {
+    console.log('开始创建RenderMode，当前设置:', renderModeSettings.value)
+    
+    // 检查Rhino插件是否已加载
+    if (!window.rhino || typeof window.rhino.CreateRenderMode !== 'function') {
+      console.log('Rhino API未找到，模拟创建RenderMode')
+      alert('RenderMode创建成功！（开发环境模拟）')
+      closeSettingsModal()
+      return
+    }
+    
+    // 将设置对象转换为JSON字符串
+    const settingsJson = JSON.stringify(renderModeSettings.value)
+    console.log('发送给Rhino的JSON:', settingsJson)
+    
+    // 实际调用Rhino API创建RenderMode
+    const resultString = await window.rhino.CreateRenderMode(settingsJson)
+    console.log('Rhino API返回结果:', resultString)
+    
+    // 解析返回的JSON字符串
+    let result
+    try {
+      result = JSON.parse(resultString)
+    } catch (parseError) {
+      console.error('解析Rhino API返回结果失败:', parseError)
+      throw new Error('解析API返回结果失败')
+    }
+    
+    if (result && result.success) {
+      alert(`RenderMode创建成功！\n${result.message || ''}`)
+      console.log('RenderMode创建结果:', result)
+      closeSettingsModal()
+    } else {
+      throw new Error(result?.error || '创建RenderMode失败')
+    }
+  } catch (error) {
+    console.error('创建RenderMode失败:', error)
+    alert(`创建RenderMode失败: ${error.message}`)
+  }
 }
 
 // 获取视口截图功能
@@ -1170,6 +1293,12 @@ onUnmounted(() => {
           </svg>
         </span>
         <span class="logo-text">RenderRhino</span>
+        <button class="settings-btn" @click="openSettingsModal" title="设置">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </div>
       <div class="top-controls">
         <span class="quality-label">设计质量</span>
@@ -1536,6 +1665,291 @@ onUnmounted(() => {
           <span class="upload-icon">📤</span>
           上传
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 设置弹窗 -->
+  <div v-if="showSettingsModal" class="modal-overlay" @click="closeSettingsModal">
+    <div class="settings-modal" @click.stop>
+      <div class="modal-header">
+        <h3>显示模式选项</h3>
+        <button class="close-btn" @click="closeSettingsModal">×</button>
+      </div>
+      <div class="modal-content">
+        <div class="settings-form">
+          <!-- 基本设置 -->
+          <div class="form-group">
+            <label>名称:</label>
+            <input v-model="renderModeSettings.name" type="text" class="form-input" placeholder="新模式" />
+          </div>
+          
+          <!-- 工作视窗设置 -->
+          <div class="settings-section">
+            <div class="section-header" @click="toggleSettingsSection('viewport')">
+              <span class="section-icon">▼</span>
+              <span class="section-title">工作视窗设置</span>
+            </div>
+            <div v-if="expandedSettingsSections.viewport" class="section-content">
+              <div class="form-row">
+                <label>背景:</label>
+                <select v-model="renderModeSettings.background.type" class="form-select">
+                  <option value="单一颜色">单一颜色</option>
+                  <option value="渐变">渐变</option>
+                  <option value="环境">环境</option>
+                </select>
+              </div>
+              
+              <div class="form-row">
+                <label>底平面设置:</label>
+                <div class="checkbox-group">
+                  <label class="checkbox-label">
+                    <input v-model="renderModeSettings.groundPlane.show" type="checkbox" />
+                    打开
+                  </label>
+                  <label class="checkbox-label">
+                    <input v-model="renderModeSettings.groundPlane.showShadow" type="checkbox" />
+                    只显示阴影
+                  </label>
+                </div>
+              </div>
+              
+              <div class="form-row">
+                <label>高度:</label>
+                <input v-model="renderModeSettings.groundPlane.height" type="number" class="form-input" step="0.01" />
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.groundPlane.autoHeight" type="checkbox" />
+                  自动高度
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 线性工作流设置 -->
+          <div class="settings-section">
+            <div class="section-header" @click="toggleSettingsSection('workflow')">
+              <span class="section-icon">▼</span>
+              <span class="section-title">线性工作流设置</span>
+            </div>
+            <div v-if="expandedSettingsSections.workflow" class="section-content">
+              <div class="checkbox-group">
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.workflow.adjustInputColors" type="checkbox" />
+                  调整输入颜色
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.workflow.adjustInputTextures" type="checkbox" />
+                  调整输入贴图
+                </label>
+              </div>
+              
+              <div class="form-row">
+                <label>输入伽马:</label>
+                <input v-model="renderModeSettings.workflow.inputGamma" type="number" class="form-input" step="0.1" />
+              </div>
+              
+              <div class="checkbox-group">
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.workflow.adjustOutputColors" type="checkbox" />
+                  调整输出颜色
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.workflow.adjustOutputTextures" type="checkbox" />
+                  调整输出贴图
+                </label>
+              </div>
+              
+              <div class="form-row">
+                <label>输出伽马:</label>
+                <input v-model="renderModeSettings.workflow.outputGamma" type="number" class="form-input" step="0.1" />
+              </div>
+            </div>
+          </div>
+          
+          <!-- 着色设置 -->
+          <div class="settings-section">
+            <div class="section-header" @click="toggleSettingsSection('shading')">
+              <span class="section-icon">▼</span>
+              <span class="section-title">着色设置</span>
+            </div>
+            <div v-if="expandedSettingsSections.shading" class="section-content">
+              <div class="checkbox-group">
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.shading.showObjects" type="checkbox" />
+                  着色物件
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.shading.showWireframe" type="checkbox" />
+                  全部线框以 X 光显示
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.shading.flatShading" type="checkbox" />
+                  平坦着色
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.shading.showVertexColors" type="checkbox" />
+                  着色顶点颜色
+                </label>
+              </div>
+              
+              <div class="form-row">
+                <label>颜色 & 材质显示:</label>
+                <select v-model="renderModeSettings.shading.materialDisplay" class="form-select">
+                  <option value="全部物件使用单一颜色">全部物件使用单一颜色</option>
+                  <option value="使用物件颜色">使用物件颜色</option>
+                  <option value="使用材质">使用材质</option>
+                </select>
+              </div>
+              
+              <div class="form-row">
+                <label>光泽度:</label>
+                <input v-model="renderModeSettings.shading.glossiness" type="range" min="0" max="100" class="form-range" />
+                <span class="range-value">{{ renderModeSettings.shading.glossiness }}</span>
+              </div>
+              
+              <div class="form-row">
+                <label>透明度:</label>
+                <input v-model="renderModeSettings.shading.transparency" type="range" min="0" max="100" class="form-range" />
+                <span class="range-value">{{ renderModeSettings.shading.transparency }}</span>
+              </div>
+              
+              <div class="form-row">
+                <label>单一物件颜色:</label>
+                <input v-model="renderModeSettings.shading.singleColor" type="color" class="form-color" />
+              </div>
+            </div>
+          </div>
+          
+          <!-- 背景设置 -->
+          <div class="settings-section">
+            <div class="section-header" @click="toggleSettingsSection('background')">
+              <span class="section-icon">▼</span>
+              <span class="section-title">背景设置</span>
+            </div>
+            <div v-if="expandedSettingsSections.background" class="section-content">
+              <div class="form-row">
+                <select v-model="renderModeSettings.background.mode" class="form-select">
+                  <option value="使用正面设置">使用正面设置</option>
+                  <option value="纯色">纯色</option>
+                  <option value="渐变">渐变</option>
+                  <option value="图像">图像</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 可见性 -->
+          <div class="settings-section">
+            <div class="section-header" @click="toggleSettingsSection('visibility')">
+              <span class="section-icon">▼</span>
+              <span class="section-title">可见性</span>
+            </div>
+            <div v-if="expandedSettingsSections.visibility" class="section-content">
+              <div class="checkbox-group">
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showCurves" type="checkbox" />
+                  显示曲面边线
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showConstructionLines" type="checkbox" />
+                  显示结构线
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showIsocurves" type="checkbox" />
+                  显示正功边线
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showMeshWires" type="checkbox" />
+                  显示正功装线
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showMeshVertices" type="checkbox" />
+                  显示细分指线
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showMeshEdges" type="checkbox" />
+                  显示细分边边
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showMeshBoundaries" type="checkbox" />
+                  显示细分边界
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showMeshNormals" type="checkbox" />
+                  显示细分对称
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showGridLines" type="checkbox" />
+                  显示网格框线
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showCurves2" type="checkbox" />
+                  显示曲线
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showLights" type="checkbox" />
+                  显示灯光
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showCameras" type="checkbox" />
+                  显示摄影机
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showText" type="checkbox" />
+                  显示文字
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showDimensions" type="checkbox" />
+                  显示注解
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showPoints" type="checkbox" />
+                  显示点物件
+                </label>
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.visibility.showClouds" type="checkbox" />
+                  显示点云
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 照明配置 -->
+          <div class="settings-section">
+            <div class="section-header" @click="toggleSettingsSection('lighting')">
+              <span class="section-icon">▼</span>
+              <span class="section-title">照明配置</span>
+            </div>
+            <div v-if="expandedSettingsSections.lighting" class="section-content">
+              <div class="form-row">
+                <label>照明方式:</label>
+                <select v-model="renderModeSettings.lighting.mode" class="form-select">
+                  <option value="无照明">无照明</option>
+                  <option value="头灯">头灯</option>
+                  <option value="场景照明">场景照明</option>
+                </select>
+              </div>
+              
+              <div class="form-row">
+                <label>环境光颜色:</label>
+                <div class="color-input-group">
+                  <input v-model="renderModeSettings.lighting.ambientColor" type="color" class="form-color" />
+                </div>
+              </div>
+              
+              <div class="checkbox-group">
+                <label class="checkbox-label">
+                  <input v-model="renderModeSettings.lighting.useAdvancedGPU" type="checkbox" />
+                  使用高级 GPU 照明
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="cancel-btn" @click="closeSettingsModal">取消</button>
+        <button class="create-btn" @click="createRenderMode">创建 RenderMode</button>
       </div>
     </div>
   </div>

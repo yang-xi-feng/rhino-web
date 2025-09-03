@@ -119,6 +119,16 @@ namespace RhinoWebIntegration
                                     }
                                 };
                                 
+                                window.rhino.CreateRenderMode = async function(settingsJson) {
+                                    try {
+                                        const result = await chrome.webview.hostObjects.rhino.CreateRenderMode(settingsJson);
+                                        return result;
+                                    } catch (error) {
+                                        console.error('调用CreateRenderMode失败:', error);
+                                        throw error;
+                                    }
+                                };
+                                
                                 console.log('Rhino API已注册并包装完成');
                                 console.log('可用方法:', Object.getOwnPropertyNames(window.rhino));
                             } catch (error) {
