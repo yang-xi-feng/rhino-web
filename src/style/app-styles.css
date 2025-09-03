@@ -1,5 +1,5 @@
 /* App.vue - 样式文件 */
-.render-vista {
+.render-rhino {
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -44,12 +44,12 @@
   padding: 4px 8px;
   border: none;
   border-radius: 4px;
-  background: rgba(255,255,255,0.2);
+  background: #2196F3;
   color: white;
 }
 
 .render-btn {
-  background: #4CAF50;
+  background: #2196F3;
   color: white;
   border: none;
   padding: 6px 16px;
@@ -906,8 +906,8 @@
 }
 
 .single-image {
-  max-width: 100%;
-  max-height: 100%;
+  max-width: min(100%, 1500px);
+  max-height: min(100%, 1500px);
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   object-fit: contain;
@@ -938,8 +938,8 @@
 }
 
 .comparison-image {
-  max-width: 100%;
-  max-height: 100%;
+  max-width: min(100%, 1500px);
+  max-height: min(100%, 1500px);
   object-fit: contain;
   user-select: none;
   pointer-events: none;
@@ -981,6 +981,7 @@
   cursor: ew-resize;
   z-index: 20;
   user-select: none;
+  transform: translateX(-50%);
 }
 
 .slider-handle {
@@ -1090,17 +1091,17 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   grid-template-rows: repeat(4, 1fr);
-  gap: 12px;
-  max-width: 500px;
+  gap: 24px;
+  max-width: 1000px;
   margin: 0 auto;
-  padding: 10px;
+  padding: 20px;
 }
 
 .category-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px;
+  padding: 16px;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1157,9 +1158,9 @@
 }
 
 .category-image-dropdown {
-  width: 45px;
-  height: 35px;
-  margin-bottom: 3px;
+  width: 90px;
+  height: 70px;
+  margin-bottom: 6px;
   overflow: hidden;
   border-radius: 3px;
 }
@@ -1180,11 +1181,11 @@
 }
 
 .category-image {
-  width: 90px;
-  height: 70px;
+  width: 180px;
+  height: 140px;
   border-radius: 4px;
   overflow: hidden;
-  margin-bottom: 6px;
+  margin-bottom: 12px;
 }
 
 .category-image img {
@@ -1289,4 +1290,141 @@
 
 .upload-btn .upload-icon {
   font-size: 16px;
+}
+
+/* 渲染结果项目样式 */
+.render-result-item {
+  position: relative;
+  min-height: 100px;
+}
+
+.render-result-item .project-thumbnail {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.project-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-time {
+  font-size: 10px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 查看更多按钮样式 */
+.view-more-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  border: 2px dashed #ccc;
+  background: #f9f9f9;
+  transition: all 0.2s ease;
+}
+
+.view-more-item:hover {
+  border-color: #2196F3;
+  background: #f0f8ff;
+}
+
+.view-more-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #666;
+}
+
+.view-more-icon {
+  font-size: 24px;
+}
+
+.view-more-text {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* 历史记录弹框样式 */
+.history-modal {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 800px;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  padding: 20px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.history-item {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.history-item:hover {
+  background: #e9ecef;
+  border-color: #2196F3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.history-thumbnail {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.history-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-time {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

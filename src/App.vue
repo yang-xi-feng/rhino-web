@@ -1,6 +1,6 @@
 <script setup>
 import RhinoViewport from './components/RhinoViewport.vue'
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { queue, ws } from './api'
 import { uploadReferenceImage } from './api/upload.js'
 import api from './api/api.js';
@@ -59,13 +59,17 @@ class ArcInsImageToolkitAPI {
 }
 
 
-// 项目数据
-const projects = ref([
-  { id: 1, name: '建筑项目1', thumbnail: 'https://picsum.photos/120/80?random=1' },
-  { id: 2, name: '建筑项目2', thumbnail: 'https://picsum.photos/120/80?random=2' },
-  { id: 3, name: '建筑项目3', thumbnail: 'https://picsum.photos/120/80?random=3' },
-  { id: 4, name: '建筑项目4', thumbnail: 'https://picsum.photos/120/80?random=4' }
-])
+// 渲染结果历史记录
+const renderHistory = ref([])
+const showViewMoreBtn = ref(false)
+const showHistoryModal = ref(false)
+
+// 计算显示的项目（最多4个）
+const displayedProjects = computed(() => {
+  const maxDisplay = 4
+  showViewMoreBtn.value = renderHistory.value.length > maxDisplay
+  return renderHistory.value.slice(0, maxDisplay)
+})
 
 const selectedProject = ref(null)
 const renderSettings = ref({
@@ -151,25 +155,23 @@ const formatFileSize = (bytes) => {
 const showDesignCategories = ref(false) // 默认隐藏，点击室内设计时才显示下拉菜单
 const designCategories = ref([
   // 第一行
-  { id: 1, name: '建筑设计', image: 'https://picsum.photos/120/80?random=101' },
-  { id: 2, name: '室内设计', image: 'https://picsum.photos/120/80?random=102' },
-  { id: 3, name: '景观设计', image: 'https://picsum.photos/120/80?random=103' },
-  { id: 4, name: '城市导航', image: 'https://picsum.photos/120/80?random=104' },
+  { id: 1, name: '建筑设计', image: '/src/assets/01-建筑设计.png' },
+  { id: 2, name: '室内设计', image: '/src/assets/02-室内设计.png' },
+  { id: 3, name: '景观设计', image: '/src/assets/03-景观设计.png' },
+  { id: 4, name: '城市导航', image: '/src/assets/04-城市鸟瞰.png' },
   // 第二行
-  { id: 5, name: '商业建筑', image: 'https://picsum.photos/120/80?random=105' },
-  { id: 6, name: '中式古建', image: 'https://picsum.photos/120/80?random=106' },
-  { id: 7, name: '大师风格', image: 'https://picsum.photos/120/80?random=107' },
-  { id: 8, name: '科幻创意', image: 'https://picsum.photos/120/80?random=108' },
+  { id: 5, name: '商业建筑', image: '/src/assets/05-商业建筑.png' },
+  { id: 6, name: '中式古建', image: '/src/assets/06-中式古建.png' },
+  { id: 7, name: '大师风格', image: '/src/assets/07-大师风格.png' },
+  { id: 8, name: '科幻创意', image: '/src/assets/08-科幻创意.png' },
   // 第三行
-  { id: 9, name: '彩色总平', image: 'https://picsum.photos/120/80?random=109' },
-  { id: 10, name: '建筑平面', image: 'https://picsum.photos/120/80?random=110' },
-  { id: 11, name: '手工模型', image: 'https://picsum.photos/120/80?random=111' },
-  { id: 12, name: '手绘插画', image: 'https://picsum.photos/120/80?random=112' },
+  { id: 9, name: '彩色总平', image: '/src/assets/09-彩色总平.png' },
+  { id: 10, name: '建筑平面', image: '/src/assets/10-建筑平面.png' },
+  { id: 11, name: '手工模型', image: '/src/assets/11-手工模型.png' },
+  { id: 12, name: '手绘插画', image: '/src/assets/12-手绘插画.png' },
   // 第四行
-  { id: 13, name: '高铁车站', image: 'https://picsum.photos/120/80?random=113' },
-  { id: 14, name: '城轨车站', image: 'https://picsum.photos/120/80?random=114' },
-  { id: 15, name: '', image: 'https://picsum.photos/120/80?random=115' },
-  { id: 16, name: '', image: 'https://picsum.photos/120/80?random=116' }
+  { id: 13, name: '高铁车站', image: '/src/assets/13-高铁车站.png' },
+  { id: 14, name: '城轨车站', image: '/src/assets/14-地铁车站.png' }
 ])
 
 // 任务相关状态
@@ -187,6 +189,30 @@ const renderedImage = ref('')
 
 const selectProject = (project) => {
   selectedProject.value = project
+}
+
+// 选择渲染结果
+const selectRenderResult = (renderResult) => {
+  selectedProject.value = renderResult
+  // 将选中的渲染结果设置为生成图片
+  generatedImage.value = renderResult.fullImage
+  showGeneratedImageWindow.value = true
+}
+
+// 打开历史记录弹框
+const openHistoryModal = () => {
+  showHistoryModal.value = true
+}
+
+// 关闭历史记录弹框
+const closeHistoryModal = () => {
+  showHistoryModal.value = false
+}
+
+// 从历史记录弹框中选择项目
+const selectHistoryItem = (item) => {
+  selectRenderResult(item)
+  closeHistoryModal()
 }
 
 // 获取视口截图功能
@@ -260,25 +286,80 @@ const startDragging = (event) => {
     sliderPosition.value = percentage
     // 更新CSS变量以实现图片裁剪效果
     if (comparisonContainer.value) {
-      comparisonContainer.value.style.setProperty('--slider-position', percentage + '%')
+      // 获取图片元素来计算正确的裁剪位置
+      const imageElement = comparisonContainer.value.querySelector('.comparison-image')
+      if (imageElement) {
+        const containerRect = comparisonContainer.value.getBoundingClientRect()
+        const imageRect = imageElement.getBoundingClientRect()
+        
+        if (containerRect.width > 0 && imageRect.width > 0) {
+          // 计算图片在容器中的边界百分比
+          const imageLeftPercent = ((imageRect.left - containerRect.left) / containerRect.width) * 100
+          const imageRightPercent = ((imageRect.right - containerRect.left) / containerRect.width) * 100
+          
+          // 计算竖线在图片范围内的相对位置（0-100%）
+          const relativePosition = Math.max(0, Math.min(100, 
+            ((percentage - imageLeftPercent) / (imageRightPercent - imageLeftPercent)) * 100
+          ))
+          
+          // 使用相对于图片的位置来设置裁剪
+          comparisonContainer.value.style.setProperty('--slider-position', relativePosition + '%')
+        } else {
+          comparisonContainer.value.style.setProperty('--slider-position', '50%')
+        }
+      } else {
+        comparisonContainer.value.style.setProperty('--slider-position', percentage + '%')
+      }
     }
   }
   
   const handleMouseMove = (e) => {
     if (!isDragging.value || !comparisonContainer.value) return
     
-    const rect = comparisonContainer.value.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100))
+    // 获取容器和图片的边界信息
+    const containerRect = comparisonContainer.value.getBoundingClientRect()
+    const imageElement = comparisonContainer.value.querySelector('.comparison-image')
+    if (!imageElement || containerRect.width === 0) return
+    
+    const imageRect = imageElement.getBoundingClientRect()
+    
+    // 计算鼠标相对于图片的位置
+    const mouseXInImage = e.clientX - imageRect.left
+    
+    // 将鼠标位置限制在图片边界内
+    const clampedMouseX = Math.max(0, Math.min(imageRect.width, mouseXInImage))
+    
+    // 计算竖线中心在容器中的绝对位置（考虑竖线宽度2px，即1px偏移）
+    const sliderCenterX = imageRect.left + clampedMouseX
+    
+    // 转换为容器中的百分比位置
+    const percentage = ((sliderCenterX - containerRect.left) / containerRect.width) * 100
+    
     updateSliderPosition(percentage)
   }
   
   const handleTouchMove = (e) => {
     if (!isDragging.value || !comparisonContainer.value) return
     
-    const rect = comparisonContainer.value.getBoundingClientRect()
-    const x = e.touches[0].clientX - rect.left
-    const percentage = Math.max(0, Math.min(100, (x / rect.width) * 100))
+    // 获取容器和图片的边界信息
+    const containerRect = comparisonContainer.value.getBoundingClientRect()
+    const imageElement = comparisonContainer.value.querySelector('.comparison-image')
+    if (!imageElement || containerRect.width === 0) return
+    
+    const imageRect = imageElement.getBoundingClientRect()
+    
+    // 计算触摸点相对于图片的位置
+    const touchXInImage = e.touches[0].clientX - imageRect.left
+    
+    // 将触摸位置限制在图片边界内
+    const clampedTouchX = Math.max(0, Math.min(imageRect.width, touchXInImage))
+    
+    // 计算竖线中心在容器中的绝对位置（考虑竖线宽度2px，即1px偏移）
+    const sliderCenterX = imageRect.left + clampedTouchX
+    
+    // 转换为容器中的百分比位置
+    const percentage = ((sliderCenterX - containerRect.left) / containerRect.width) * 100
+    
     updateSliderPosition(percentage)
   }
   
@@ -428,7 +509,7 @@ const handleGlobalMessage = async (event) => {
       }
       // 关闭图片选择器
       closeImageSelector()
-      alert('图片上传成功！')
+      // alert('图片上传成功！')
     } else {
       throw new Error('无法获取图片数据')
     }
@@ -520,17 +601,28 @@ const handleTaskProgress = (progressOrData) => {
       
       // 保存渲染结果图片
       if (resultImage) {
-        renderedImage.value = api.config.imgUrl +  resultImage
+        const imageUrl = api.config.imgUrl + resultImage
+        renderedImage.value = imageUrl
         // 同时设置生成图片变量
-        generatedImage.value = api.config.imgUrl +  resultImage
+        generatedImage.value = imageUrl
         // 自动显示生成图片窗口
         showGeneratedImageWindow.value = true
+        
+        // 添加到渲染历史记录
+        const newRenderResult = {
+          id: Date.now(),
+          thumbnail: imageUrl,
+          fullImage: imageUrl,
+          timestamp: new Date().toLocaleString(),
+          name: `渲染结果 ${renderHistory.value.length + 1}`
+        }
+        renderHistory.value.unshift(newRenderResult) // 添加到开头
         
         // 保持模型原图显示，实现对比功能
         // showScreenshot.value = false // 注释掉这行，保持原图显示
         
-        taskMessages.value.push('渲染结果图片已获取')
-        console.log('渲染结果图片:', api.config.imgUrl +  resultImage)
+        taskMessages.value.push('渲染结果图片已获取并添加到历史记录')
+        console.log('渲染结果图片:', imageUrl)
       }
     }, 1000)
   }
@@ -939,12 +1031,51 @@ const cancelRunningTask = async () => {
   }
 }
 
+// 处理窗口大小变化
+const handleWindowResize = () => {
+  // 当窗口大小变化时，重新计算图片边界并调整竖线位置
+  if (comparisonContainer.value) {
+    const imageElement = comparisonContainer.value.querySelector('.comparison-image')
+    if (imageElement) {
+      const containerRect = comparisonContainer.value.getBoundingClientRect()
+      const imageRect = imageElement.getBoundingClientRect()
+      
+      if (containerRect.width > 0) {
+        // 计算图片在容器中的边界百分比
+        const imageLeftPercent = ((imageRect.left - containerRect.left) / containerRect.width) * 100
+        const imageRightPercent = ((imageRect.right - containerRect.left) / containerRect.width) * 100
+        
+        // 确保竖线位置在图片边界内
+        const clampedPosition = Math.max(imageLeftPercent, Math.min(imageRightPercent, sliderPosition.value))
+        
+        // 更新竖线位置
+        if (clampedPosition !== sliderPosition.value) {
+          sliderPosition.value = clampedPosition
+        }
+        
+        // 使用新的逻辑计算相对于图片的裁剪位置
+        const relativePosition = Math.max(0, Math.min(100, 
+          ((clampedPosition - imageLeftPercent) / (imageRightPercent - imageLeftPercent)) * 100
+        ))
+        
+        comparisonContainer.value.style.setProperty('--slider-position', relativePosition + '%')
+      }
+    } else {
+      // 如果没有图片，保持当前位置
+      comparisonContainer.value.style.setProperty('--slider-position', '50%')
+    }
+  }
+}
+
 // 添加和移除事件监听器
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
   
   // 添加全局消息监听器
   window.addEventListener('message', handleGlobalMessage)
+  
+  // 添加窗口大小变化监听器
+  window.addEventListener('resize', handleWindowResize)
   
   // 监听生成图片事件
   ws.on('generatedImages', (data) => {
@@ -955,10 +1086,51 @@ onMounted(() => {
     }
   })
   
-  // 初始化CSS变量
+  // 初始化CSS变量和竖线位置
   nextTick(() => {
     if (comparisonContainer.value) {
-      comparisonContainer.value.style.setProperty('--slider-position', '50%')
+      const imageElement = comparisonContainer.value.querySelector('.comparison-image')
+      if (imageElement) {
+        // 等待图片加载完成后再设置位置
+        const img = imageElement
+        const setInitialPosition = () => {
+          const containerRect = comparisonContainer.value.getBoundingClientRect()
+          const imageRect = img.getBoundingClientRect()
+          
+          if (containerRect.width > 0 && imageRect.width > 0) {
+            // 计算图片中心位置
+            const imageCenterX = imageRect.left + imageRect.width / 2
+            const centerPercent = ((imageCenterX - containerRect.left) / containerRect.width) * 100
+            
+            sliderPosition.value = centerPercent
+            
+            // 计算图片在容器中的边界百分比
+            const imageLeftPercent = ((imageRect.left - containerRect.left) / containerRect.width) * 100
+            const imageRightPercent = ((imageRect.right - containerRect.left) / containerRect.width) * 100
+            
+            // 计算相对于图片的裁剪位置（50%表示图片中心）
+            const relativePosition = Math.max(0, Math.min(100, 
+              ((centerPercent - imageLeftPercent) / (imageRightPercent - imageLeftPercent)) * 100
+            ))
+            
+            comparisonContainer.value.style.setProperty('--slider-position', relativePosition + '%')
+          } else {
+            // 如果图片还没加载完成，使用默认50%
+            sliderPosition.value = 50
+            comparisonContainer.value.style.setProperty('--slider-position', '50%')
+          }
+        }
+        
+        if (img.complete) {
+          setInitialPosition()
+        } else {
+          img.addEventListener('load', setInitialPosition)
+        }
+      } else {
+        // 如果没有图片，使用默认位置
+        sliderPosition.value = 50
+        comparisonContainer.value.style.setProperty('--slider-position', '50%')
+      }
     }
   })
 })
@@ -968,6 +1140,9 @@ onUnmounted(() => {
   
   // 移除全局消息监听器
   window.removeEventListener('message', handleGlobalMessage)
+  
+  // 移除窗口大小变化监听器
+  window.removeEventListener('resize', handleWindowResize)
   
   // 清理上传相关的定时器
   if (uploadTimeoutId) {
@@ -981,12 +1156,20 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="render-vista">
+  <div class="render-rhino">
     <!-- 顶部标题栏 -->
     <header class="top-bar">
       <div class="logo">
-        <span class="logo-icon">🔷</span>
-        <span class="logo-text">Render Vista</span>
+        <span class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 12c0-1.5.5-3 1.5-4.2C5.8 6.5 7.5 5.5 9.5 5c1-.2 2-.3 3-.3s2 .1 3 .3c2 .5 3.7 1.5 5 2.8C21.5 9 22 10.5 22 12c0 .8-.1 1.5-.3 2.2-.3 1.2-.8 2.3-1.5 3.2-1.2 1.5-2.8 2.6-4.7 3.1-1 .3-2 .4-3 .4s-2-.1-3-.4c-1.9-.5-3.5-1.6-4.7-3.1-.7-.9-1.2-2-1.5-3.2C3.1 13.5 3 12.8 3 12z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            <path d="M8 10c0-.5.4-1 1-1s1 .5 1 1-.4 1-1 1-1-.5-1-1z" fill="currentColor"/>
+            <path d="M14 10c0-.5.4-1 1-1s1 .5 1 1-.4 1-1 1-1-.5-1-1z" fill="currentColor"/>
+            <path d="M12 8c.8 0 1.5.3 2 .8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+            <path d="M10 14c.7.7 1.3 1 2 1s1.3-.3 2-1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+          </svg>
+        </span>
+        <span class="logo-text">RenderRhino</span>
       </div>
       <div class="top-controls">
         <span class="quality-label">设计质量</span>
@@ -1035,13 +1218,25 @@ onUnmounted(() => {
           </div>
           
           <div 
-            v-for="project in projects" 
+            v-for="project in displayedProjects" 
             :key="project.id"
-            class="project-item"
+            class="project-item render-result-item"
             :class="{ active: selectedProject?.id === project.id }"
-            @click="selectProject(project)"
+            @click="selectRenderResult(project)"
           >
             <img :src="project.thumbnail" :alt="project.name" class="project-thumbnail">
+            <div class="project-info">
+              <span class="project-name">{{ project.name }}</span>
+              <span class="project-time">{{ project.timestamp }}</span>
+            </div>
+          </div>
+          
+          <!-- 查看更多按钮 -->
+          <div v-if="showViewMoreBtn" class="project-item view-more-item" @click="openHistoryModal">
+            <div class="view-more-content">
+              <span class="view-more-icon">📋</span>
+              <span class="view-more-text">查看更多</span>
+            </div>
           </div>
         </div>
         
@@ -1126,13 +1321,7 @@ onUnmounted(() => {
         <div v-if="!showScreenshot && !showGeneratedImageWindow" class="viewport-content">
           <RhinoViewport @imageUploaded="handleImageUpload" />
           
-          <!-- 底部预览图片 -->
-          <div class="preview-gallery">
-            <div class="gallery-item" v-for="i in 4" :key="i">
-              <img :src="`https://picsum.photos/80/60?random=${i+10}`" alt="预览图">
-            </div>
-            <button class="refresh-btn">🔄</button>
-          </div>
+
         </div>
         
         <!-- 任务消息日志 -->
@@ -1299,6 +1488,32 @@ onUnmounted(() => {
       </aside>
     </div>
 
+  </div>
+
+  <!-- 渲染历史记录弹框 -->
+  <div v-if="showHistoryModal" class="modal-overlay" @click="closeHistoryModal">
+    <div class="history-modal" @click.stop>
+      <div class="modal-header">
+        <h3>渲染历史记录</h3>
+        <button class="close-btn" @click="closeHistoryModal">×</button>
+      </div>
+      <div class="modal-content">
+        <div class="history-grid">
+          <div 
+            v-for="item in renderHistory" 
+            :key="item.id"
+            class="history-item"
+            @click="selectHistoryItem(item)"
+          >
+            <img :src="item.thumbnail" :alt="item.name" class="history-thumbnail">
+            <div class="history-info">
+              <span class="history-name">{{ item.name }}</span>
+              <span class="history-time">{{ item.timestamp }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 图片选择器弹框 -->
