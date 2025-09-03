@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RhinoWebIntegration")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4cad3b632ebc0e6bf1513616f3435e14cb22015a")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5b127c86cee4777bb18d14e5652fe0d1df939813")]
 [assembly: System.Reflection.AssemblyProductAttribute("RhinoWebIntegration")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RhinoWebIntegration")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
