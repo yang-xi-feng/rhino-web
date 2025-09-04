@@ -13,7 +13,6 @@ dist-ssr
 *.local
 .vs/*
 bin/*
-obj/*
 
 # Editor directories and files
 .vscode/*
